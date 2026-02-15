@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notification Settings - The First Client Engine</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .notification-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .notification-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .notification-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .notification-icon {
+            font-size: 2rem;
+        }
+        
+        .notification-header h3 {
+            margin: 0;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+            margin-bottom: 1rem;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: #2563eb;
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+        
+        .notification-field {
+            margin-top: 1rem;
+        }
+        
+        .test-button {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            background: #f3f4f6;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        .test-button:hover {
+            background: #e5e7eb;
+        }
+        
+        .save-button {
+            margin-top: 2rem;
+            padding: 1rem;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">The First Client Engine</div>
+            <div class="nav-links">
+                <a href="/dashboard">Dashboard</a>
+                <a href="/campaign-setup">New Campaign</a>
+                <a href="/notifications">Notifications</a>
+                <a href="/results">Results</a>
+                <a href="/login" class="btn btn-outline">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="setup-wizard" style="max-width: 1000px;">
+        <h1>Notification Settings</h1>
+        <p>Choose how you want to receive hot lead alerts</p>
+        
+        <form id="notifications-form">
+            <div class="notification-grid">
+                <!-- Email -->
+                <div class="notification-card">
+                    <div class="notification-header">
+                        <span class="notification-icon">📧</span>
+                        <h3>Email</h3>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="email-toggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <div class="notification-field">
+                        <label>Email Address</label>
+                        <input type="email" class="form-control" id="email-address" placeholder="your@email.com">
+                    </div>
+                    <button type="button" class="test-button" onclick="testNotification('email')">Send Test Email</button>
+                </div>
+
+                <!-- SMS -->
+                <div class="notification-card">
+                    <div class="notification-header">
+                        <span class="notification-icon">📱</span>
+                        <h3>SMS</h3>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="sms-toggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <div class="notification-field">
+                        <label>Phone Number</label>
+                        <input type="tel" class="form-control" id="phone-number" placeholder="+1234567890">
+                    </div>
+                    <button type="button" class="test-button" onclick="testNotification('sms')">Send Test SMS</button>
+                </div>
+
+                <!-- WhatsApp -->
+                <div class="notification-card">
+                    <div class="notification-header">
+                        <span class="notification-icon">💬</span>
+                        <h3>WhatsApp</h3>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="whatsapp-toggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <div class="notification-field">
+                        <label>WhatsApp Number</label>
+                        <input type="tel" class="form-control" id="whatsapp-number" placeholder="+1234567890">
+                    </div>
+                    <button type="button" class="test-button" onclick="testNotification('whatsapp')">Send Test WhatsApp</button>
+                </div>
+
+                <!-- Facebook Messenger -->
+                <div class="notification-card">
+                    <div class="notification-header">
+                        <span class="notification-icon">📘</span>
+                        <h3>Facebook Messenger</h3>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="facebook-toggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <div class="notification-field">
+                        <label>Facebook PSID</label>
+                        <input type="text" class="form-control" id="facebook-psid" placeholder="Connect via Facebook">
+                    </div>
+                    <button type="button" class="test-button" onclick="testNotification('facebook')">Send Test Message</button>
+                </div>
+
+                <!-- Telegram -->
+                <div class="notification-card">
+                    <div class="notification-header">
+                        <span class="notification-icon">✈️</span>
+                        <h3>Telegram</h3>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="telegram-toggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <div class="notification-field">
+                        <label>Telegram Chat ID</label>
+                        <input type="text" class="form-control" id="telegram-chat" placeholder="@username or chat ID">
+                    </div>
+                    <button type="button" class="test-button" onclick="testNotification('telegram')">Send Test Message</button>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-large btn-block save-button">Save Settings</button>
+        </form>
+    </div>
+
+    <script>
+        // Load saved settings
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                const response = await fetch('/api/user/notifications?user_id=default_user');
+                const settings = await response.json();
+                
+                document.getElementById('email-toggle').checked = settings.email || false;
+                document.getElementById('sms-toggle').checked = settings.sms || false;
+                document.getElementById('whatsapp-toggle').checked = settings.whatsapp || false;
+                document.getElementById('facebook-toggle').checked = settings.facebook || false;
+                document.getElementById('telegram-toggle').checked = settings.telegram || false;
+                
+                document.getElementById('email-address').value = settings.email_address || '';
+                document.getElementById('phone-number').value = settings.phone_number || '';
+                document.getElementById('whatsapp-number').value = settings.whatsapp_number || '';
+                document.getElementById('facebook-psid').value = settings.facebook_psid || '';
+                document.getElementById('telegram-chat').value = settings.telegram_chat_id || '';
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+        });
+
+        // Save settings
+        document.getElementById('notifications-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const settings = {
+                user_id: 'default_user',
+                email: document.getElementById('email-toggle').checked,
+                sms: document.getElementById('sms-toggle').checked,
+                whatsapp: document.getElementById('whatsapp-toggle').checked,
+                facebook: document.getElementById('facebook-toggle').checked,
+                telegram: document.getElementById('telegram-toggle').checked,
+                email_address: document.getElementById('email-address').value,
+                phone_number: document.getElementById('phone-number').value,
+                whatsapp_number: document.getElementById('whatsapp-number').value,
+                facebook_psid: document.getElementById('facebook-psid').value,
+                telegram_chat_id: document.getElementById('telegram-chat').value
+            };
+            
+            try {
+                const response = await fetch('/api/user/notifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    alert('Settings saved successfully!');
+                }
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                alert('Error saving settings');
+            }
+        });
+
+        // Test notifications
+        async function testNotification(channel) {
+            let message = 'This is a test notification from The First Client Engine!';
+            let contactInfo = '';
+            
+            switch(channel) {
+                case 'email':
+                    contactInfo = document.getElementById('email-address').value;
+                    break;
+                case 'sms':
+                    contactInfo = document.getElementById('phone-number').value;
+                    break;
+                case 'whatsapp':
+                    contactInfo = document.getElementById('whatsapp-number').value;
+                    break;
+                case 'facebook':
+                    contactInfo = document.getElementById('facebook-psid').value;
+                    break;
+                case 'telegram':
+                    contactInfo = document.getElementById('telegram-chat').value;
+                    break;
+            }
+            
+            if (!contactInfo) {
+                alert('Please enter your contact information first');
+                return;
+            }
+            
+            alert(`Test ${channel} notification sent! (Demo mode)`);
+            // In production, you'd call an API endpoint to send the test
+        }
+    </script>
+</body>
+</html>

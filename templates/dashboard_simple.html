@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="px-4 sm:px-0">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Your Campaigns</h1>
+        <a href="/campaign/new" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            New Campaign
+        </a>
+    </div>
+
+    {% if not user.email_user %}
+    <div class="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                    <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                </svg>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-blue-700">
+                    <strong>Configure email settings</strong> to send campaign emails.
+                    <a href="/settings/email" class="font-medium underline text-blue-700 hover:text-blue-600">Configure now →</a>
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if campaigns %}
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {% for campaign in campaigns %}
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200 card-hover">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ campaign.name }}</h3>
+                <p class="text-sm text-gray-500 mb-4">Created: {{ campaign.created_at[:10] }}</p>
+                
+                {% if stats and stats[loop.index0] %}
+                {% set s = stats[loop.index0] %}
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <p class="text-xs text-gray-500 uppercase tracking-wider">Leads</p>
+                        <p class="text-xl font-semibold text-gray-900">{{ s.total_leads }}</p>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <p class="text-xs text-gray-500 uppercase tracking-wider">Hot</p>
+                        <p class="text-xl font-semibold text-green-600">{{ s.hot_leads }}</p>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <p class="text-xs text-gray-500 uppercase tracking-wider">Emails</p>
+                        <p class="text-xl font-semibold text-gray-900">{{ s.emails_sent }}</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="flex space-x-3">
+                    <a href="/campaign/{{ campaign.campaign_id }}" 
+                       class="flex-1 inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                        View Details
+                    </a>
+                    <form action="/campaign/{{ campaign.campaign_id }}/discover-businesses" method="POST" class="flex-1">
+                        <button type="submit" 
+                                class="w-full inline-flex justify-center items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                            Find Businesses
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+        <div class="px-4 py-12 text-center">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+            </svg>
+            <h3 class="mt-4 text-lg font-medium text-gray-900">No campaigns yet</h3>
+            <p class="mt-2 text-sm text-gray-500">Create your first campaign to start finding real businesses</p>
+            <div class="mt-6">
+                <a href="/campaign/new" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                    Create Campaign
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

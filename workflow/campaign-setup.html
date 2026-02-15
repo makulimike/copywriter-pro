@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Campaign - The First Client Engine</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">The First Client Engine</div>
+            <div class="nav-links">
+                <a href="/dashboard">Dashboard</a>
+                <a href="/campaign-setup">New Campaign</a>
+                <a href="/results">Results</a>
+                <a href="/login" class="btn btn-outline">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="setup-wizard">
+        <h1>Create New Campaign</h1>
+        
+        <form id="campaign-form">
+            <div class="setup-step">
+                <h2>Step 1: Campaign Details</h2>
+                <div class="form-group">
+                    <label>Campaign Name</label>
+                    <input type="text" class="form-control" id="campaign-name" placeholder="e.g., SaaS Outreach" required>
+                </div>
+                <div class="form-group">
+                    <label>Target Niche</label>
+                    <input type="text" class="form-control" id="target-niche" placeholder="e.g., e-commerce brands" required>
+                </div>
+            </div>
+
+            <div class="setup-step">
+                <h2>Step 2: Your Script</h2>
+                <div class="form-group">
+                    <label>Call Script</label>
+                    <textarea class="form-control" id="script" placeholder="Write your script here..." required></textarea>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-large btn-block">Continue to Add Leads →</button>
+        </form>
+    </div>
+
+    <script src="/main.js"></script>
+</body>
+</html>

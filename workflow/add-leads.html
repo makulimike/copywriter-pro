@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Leads - The First Client Engine</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">The First Client Engine</div>
+            <div class="nav-links">
+                <a href="/dashboard">Dashboard</a>
+                <a href="/campaign-setup">New Campaign</a>
+                <a href="/results">Results</a>
+                <a href="/login" class="btn btn-outline">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="setup-wizard">
+        <h1>Add Leads</h1>
+        <p>Enter one lead per line in format: Name, Phone</p>
+        
+        <form id="leads-form">
+            <div class="form-group">
+                <label>Leads (CSV format)</label>
+                <textarea class="form-control" id="leads-csv" rows="10" placeholder="John Doe, +1234567890&#10;Jane Smith, +0987654321" required></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-large btn-block">Upload & Launch Campaign →</button>
+        </form>
+    </div>
+
+    <script src="/main.js"></script>
+</body>
+</html>

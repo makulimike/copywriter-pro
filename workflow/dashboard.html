@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - The First Client Engine</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">The First Client Engine</div>
+            <div class="nav-links">
+                <a href="/dashboard">Dashboard</a>
+                <a href="/campaign-setup">New Campaign</a>
+                <a href="/results">Results</a>
+                <a href="/login" class="btn btn-outline">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard">
+        <div class="container">
+            <div class="dashboard-header">
+                <h1>Welcome back!</h1>
+                <p>Your campaigns are running in the background.</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-calls">147</div>
+                    <div class="stat-label">Total Calls</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="hot-leads">12</div>
+                    <div class="stat-label">Hot Leads</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="booked-calls">8</div>
+                    <div class="stat-label">Booked Calls</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="conversion-rate">5.4%</div>
+                    <div class="stat-label">Conversion Rate</div>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="recent-activity">
+                    <h2>Recent Activity</h2>
+                    <ul class="activity-list">
+                        <li class="activity-item">
+                            <span class="activity-time">2 min ago</span>
+                            <strong>Hot lead detected</strong> - Sarah from TechCorp
+                        </li>
+                        <li class="activity-item">
+                            <span class="activity-time">15 min ago</span>
+                            <strong>Call completed</strong> - Not interested
+                        </li>
+                        <li class="activity-item">
+                            <span class="activity-time">1 hour ago</span>
+                            <strong>Call booked</strong> - Mike from Startup.io
+                        </li>
+                    </ul>
+                </div>
+                <div class="quick-actions">
+                    <h2>Quick Actions</h2>
+                    <div class="actions-grid">
+                        <a href="/campaign-setup" class="action-btn">New Campaign</a>
+                        <a href="/add-leads" class="action-btn">Add Leads</a>
+                        <a href="/results" class="action-btn">View Results</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/main.js"></script>
+</body>
+</html>

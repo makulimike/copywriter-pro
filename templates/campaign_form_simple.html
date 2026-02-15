@@ -1,0 +1,114 @@
+{% extends "base_simple.html" %}
+{% block title %}New Campaign{% endblock %}
+{% block content %}
+<div class="px-4 sm:px-0">
+    <h1 class="text-3xl font-bold text-gray-900 mb-8">Create New Campaign</h1>
+
+    <form action="/campaign/new" method="POST" class="space-y-8">
+        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+                <h3 class="text-lg font-medium leading-6 text-gray-900">Campaign Basics</h3>
+                <p class="mt-1 text-sm text-gray-500">Basic information about your outreach campaign.</p>
+            </div>
+            <div class="px-6 py-5">
+                <div class="grid grid-cols-6 gap-6">
+                    <div class="col-span-6">
+                        <label for="name" class="block text-sm font-medium text-gray-700">Campaign Name</label>
+                        <input type="text" name="name" id="name" required
+                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+
+                    <div class="col-span-6">
+                        <label for="industries" class="block text-sm font-medium text-gray-700">Target Industries (comma-separated)</label>
+                        <input type="text" name="industries" id="industries" required
+                               placeholder="e.g., saas, fintech, e-commerce, healthtech"
+                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+
+                    <div class="col-span-6 sm:col-span-3">
+                        <label for="locations" class="block text-sm font-medium text-gray-700">Target Locations (cities)</label>
+                        <input type="text" name="locations" id="locations"
+                               placeholder="e.g., San Francisco, London, Singapore"
+                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+
+                    <div class="col-span-6 sm:col-span-3">
+                        <label for="countries" class="block text-sm font-medium text-gray-700">Target Countries</label>
+                        <input type="text" name="countries" id="countries"
+                               placeholder="e.g., United States, United Kingdom, Germany"
+                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+
+                    <div class="col-span-6">
+                        <div class="flex items-start">
+                            <div class="flex items-center h-5">
+                                <input id="search_globally" name="search_globally" type="checkbox" checked
+                                       class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                            </div>
+                            <div class="ml-3 text-sm">
+                                <label for="search_globally" class="font-medium text-gray-700">Search globally</label>
+                                <p class="text-gray-500">Find real businesses worldwide, not just in specified locations</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+                <h3 class="text-lg font-medium leading-6 text-gray-900">Email Template</h3>
+                <p class="mt-1 text-sm text-gray-500">Use [Name], [Company], [Industry], [Country] as placeholders.</p>
+            </div>
+            <div class="px-6 py-5">
+                <div class="grid grid-cols-6 gap-6">
+                    <div class="col-span-6">
+                        <label for="email_subject" class="block text-sm font-medium text-gray-700">Email Subject</label>
+                        <input type="text" name="email_subject" id="email_subject" required
+                               placeholder="e.g., Copywriting help for [Company]"
+                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+
+                    <div class="col-span-6">
+                        <label for="email_body" class="block text-sm font-medium text-gray-700">Email Body</label>
+                        <textarea name="email_body" id="email_body" rows="8" required
+                                  class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                  placeholder="Hi [Name],
+
+I specialize in copywriting for [Industry] companies. I noticed [Company] is doing interesting work in [Country].
+
+Would you be open to a quick chat about how I could help with your copywriting needs?
+
+Best regards,
+[Your Name]"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+                <h3 class="text-lg font-medium leading-6 text-gray-900">Notifications</h3>
+                <p class="mt-1 text-sm text-gray-500">Get email alerts when leads are hot.</p>
+            </div>
+            <div class="px-6 py-5">
+                <div class="grid grid-cols-6 gap-6">
+                    <div class="col-span-6">
+                        <label for="notify_email" class="block text-sm font-medium text-gray-700">Notification Email</label>
+                        <input type="email" name="notify_email" id="notify_email"
+                               placeholder="your@email.com"
+                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-end">
+            <button type="submit"
+                    class="ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                Create Campaign
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

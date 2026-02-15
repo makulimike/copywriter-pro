@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Setup Instructions{% endblock %}
+{% block content %}
+<div class="px-4 sm:px-0">
+    <h1 class="text-3xl font-bold text-gray-900 mb-8">API Setup Instructions</h1>
+
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-medium text-gray-900">Current Configuration</h3>
+        </div>
+        <div class="px-6 py-5">
+            <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">SMTP Email</dt>
+                    <dd class="mt-1 text-sm text-gray-900">clintonmike691@gmail.com</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Google Places API</dt>
+                    <dd class="mt-1 text-sm text-gray-900">Not configured</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Clearbit API</dt>
+                    <dd class="mt-1 text-sm text-gray-900">Not configured</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Hunter.io API</dt>
+                    <dd class="mt-1 text-sm text-gray-900">Not configured</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+        <div class-="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-medium text-gray-900">How to Get API Keys</h3>
+        </div>
+        <div class="px-6 py-5">
+            <ul class="space-y-3">
+                <li class="flex items-start">
+                    <span class="flex-shrink-0 h-5 w-5 text-indigo-500">•</span>
+                    <span class="ml-2 text-sm text-gray-700"><strong>Google Places API</strong> - <a href="https://developers.google.com/maps/documentation/places/web-service/get-api-key" class="text-indigo-600 hover:text-indigo-500" target="_blank">Get API Key</a></span>
+                </li>
+                <li class="flex items-start">
+                    <span class="flex-shrink-0 h-5 w-5 text-indigo-500">•</span>
+                    <span class="ml-2 text-sm text-gray-700"><strong>Clearbit API</strong> - <a href="https://dashboard.clearbit.com/signup" class="text-indigo-600 hover:text-indigo-500" target="_blank">Get API Key</a></span>
+                </li>
+                <li class="flex items-start">
+                    <span class="flex-shrink-0 h-5 w-5 text-indigo-500">•</span>
+                    <span class="ml-2 text-sm text-gray-700"><strong>Hunter.io API</strong> - <a href="https://hunter.io/users/sign_up" class="text-indigo-600 hover:text-indigo-500" target="_blank">Get API Key</a></span>
+                </li>
+                <li class="flex items-start">
+                    <span class="flex-shrink-0 h-5 w-5 text-indigo-500">•</span>
+                    <span class="ml-2 text-sm text-gray-700"><strong>Yelp API</strong> - <a href="https://www.yelp.com/developers" class="text-indigo-600 hover:text-indigo-500" target="_blank">Get API Key</a></span>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }}{% endblock %}
+{% block content %}
+<div class="px-4 sm:px-0">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">{{ campaign.name }}</h1>
+            <p class="mt-1 text-sm text-gray-500">Created: {{ campaign.created_at[:10] }}</p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+            <form action="/campaign/{{ campaign.campaign_id }}/discover-businesses" method="POST" class="inline">
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Find Real Businesses
+                </button>
+            </form>
+            <form action="/campaign/{{ campaign.campaign_id }}/send-emails" method="POST" class="inline" id="sendEmailsForm">
+                <button type="submit" id="sendEmailsBtn"
+                        class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Send Emails
+                </button>
+            </form>
+            <form action="/campaign/{{ campaign.campaign_id }}/delete" method="POST" class="inline" onsubmit="return confirm('Are you sure? This will delete all leads and emails.')">
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                    Delete
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="emailProgress" class="bg-white shadow-sm rounded-lg border border-gray-200 mb-8 hidden">
+        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-medium text-gray-900">Email Sending Progress</h3>
+        </div>
+        <div class="px-6 py-5">
+            <div class="mb-4">
+                <div class="flex justify-between mb-2">
+                    <span class="text-sm font-medium text-gray-700">Sending emails...</span>
+                    <span class="text-sm font-medium text-gray-700" id="progressPercent">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progressBar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                <div>
+                    <p class="text-xs text-gray-500">Total</p>
+                    <p id="progressTotal" class="text-lg font-semibold text-gray-900">0</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500">Sent</p>
+                    <p id="progressSent" class="text-lg font-semibold text-green-600">0</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500">Sending</p>
+                    <p id="progressSending" class="text-lg font-semibold text-yellow-600 flex items-center justify-center">
+                        <span id="sendingCount">0</span>
+                        <svg class="hidden ml-2 h-4 w-4 animate-spin text-yellow-600" id="sendingSpinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500">Failed</p>
+                    <p id="progressFailed" class="text-lg font-semibold text-red-600">0</p>
+                </div>
+            </div>
+            <p id="progressMessage" class="mt-4 text-sm text-gray-500 text-center"></p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <dt class="text-sm font-medium text-gray-500 truncate">Total Leads</dt>
+                <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ stats.total_leads }}</dd>
+            </div>
+        </div>
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <dt class="text-sm font-medium text-gray-500 truncate">Hot Leads</dt>
+                <dd class="mt-1 text-3xl font-semibold text-green-600">{{ stats.hot_leads }}</dd>
+            </div>
+        </div>
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <dt class="text-sm font-medium text-gray-500 truncate">Emails Sent</dt>
+                <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ stats.emails_sent }}</dd>
+            </div>
+        </div>
+    </div>
+
+    {% if stats.countries_found > 0 %}
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 mb-8">
+        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-medium text-gray-900">Countries Found: {{ stats.countries_found }}</h3>
+        </div>
+        <div class="px-6 py-5 overflow-x-auto">
+            <pre class="text-sm text-gray-600 whitespace-pre-wrap">{{ stats.country_breakdown }}</pre>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 mb-8">
+        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-medium text-gray-900">Import Leads from CSV</h3>
+        </div>
+        <div class="px-6 py-5">
+            <form action="/campaign/{{ campaign.campaign_id }}/import-leads" method="POST" enctype="multipart/form-data">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <input type="file" name="leads_file" accept=".csv" required
+                           class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                    <button type="submit"
+                            class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Upload
+                    </button>
+                </div>
+                <p class="mt-2 text-xs text-gray-500">CSV should have columns: name, company, email, website, industry, location, country, phone</p>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-medium text-gray-900">Leads</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Industry</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Country</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for lead in leads %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ lead.name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.company }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.email }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.phone }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.industry }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.country }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                {% if lead.status == 'hot' %}bg-green-100 text-green-800
+                                {% elif lead.status == 'maybe' %}bg-yellow-100 text-yellow-800
+                                {% elif lead.status == 'cold' %}bg-gray-100 text-gray-800
+                                {% elif lead.email_status == 'sending' %}bg-yellow-100 text-yellow-800 animate-pulse
+                                {% else %}bg-blue-100 text-blue-800{% endif %}">
+                                {{ lead.email_status if lead.email_status == 'sending' else lead.status }}
+                                {% if lead.email_status == 'sending' %}
+                                <svg class="ml-1 h-3 w-3 animate-spin inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.qualification_score }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <a href="/lead/{{ lead.lead_id }}" class="text-indigo-600 hover:text-indigo-900">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+document.getElementById('sendEmailsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    document.getElementById('emailProgress').classList.remove('hidden');
+    
+    document.getElementById('sendEmailsBtn').disabled = true;
+    document.getElementById('sendEmailsBtn').classList.add('opacity-50', 'cursor-not-allowed');
+    
+    fetch(this.action, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+    }).then(response => {
+        if (response.redirected) {
+            startProgressPolling();
+        }
+    });
+});
+
+function startProgressPolling() {
+    const campaignId = '{{ campaign.campaign_id }}';
+    
+    const pollInterval = setInterval(() => {
+        fetch(`/campaign/${campaignId}/email-progress`)
+            .then(response => response.json())
+            .then(data => {
+                updateProgress(data);
+                
+                if (data.sent + data.failed >= data.total) {
+                    clearInterval(pollInterval);
+                    document.getElementById('progressMessage').innerHTML = '✅ Email campaign complete!';
+                    document.getElementById('sendingSpinner').classList.add('hidden');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                }
+            });
+    }, 1000);
+}
+
+function updateProgress(data) {
+    const total = data.total || 0;
+    const sent = data.sent || 0;
+    const sending = data.sending || 0;
+    const failed = data.failed || 0;
+    const completed = sent + failed;
+    
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    document.getElementById('progressTotal').textContent = total;
+    document.getElementById('progressSent').textContent = sent;
+    document.getElementById('sendingCount').textContent = sending;
+    document.getElementById('progressFailed').textContent = failed;
+    document.getElementById('progressPercent').textContent = percent + '%';
+    document.getElementById('progressBar').style.width = percent + '%';
+    
+    if (sending > 0) {
+        document.getElementById('sendingSpinner').classList.remove('hidden');
+        document.getElementById('progressMessage').innerHTML = 'Sending emails... please wait';
+    } else {
+        document.getElementById('sendingSpinner').classList.add('hidden');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const campaignId = '{{ campaign.campaign_id }}';
+    
+    fetch(`/campaign/${campaignId}/email-progress`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.sending > 0) {
+                document.getElementById('emailProgress').classList.remove('hidden');
+                updateProgress(data);
+                startProgressPolling();
+            }
+        });
+});
+</script>
+{% endblock %}

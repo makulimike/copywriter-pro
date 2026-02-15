@@ -1,0 +1,172 @@
+{% extends "base_simple.html" %}
+{% block title %}{{ lead.name }} - {{ lead.company }}{% endblock %}
+{% block content %}
+<div class="px-4 sm:px-0">
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">{{ lead.name }}</h1>
+            <p class="mt-1 text-lg text-gray-600">{{ lead.company }}</p>
+        </div>
+        <div>
+            <button onclick="sendEmail()" id="sendEmailBtn"
+                    class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                Send Email
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+            <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+                <h3 class="text-lg font-medium text-gray-900">Lead Information</h3>
+            </div>
+            <div class="px-6 py-5">
+                <dl class="grid grid-cols-1 gap-4">
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Full name</dt>
+                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.name }}</dd>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Company</dt>
+                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.company }}</dd>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Email</dt>
+                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.email }}</dd>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Website</dt>
+                        <dd class="text-sm text-gray-900 col-span-2">
+                            {% if lead.website %}
+                            <a href="{{ lead.website }}" target="_blank" class="text-indigo-600 hover:text-indigo-900">{{ lead.website }}</a>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Industry</dt>
+                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.industry or '-' }}</dd>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Location</dt>
+                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.location or '-' }}</dd>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Country</dt>
+                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.country or '-' }}</dd>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Status</dt>
+                        <dd class="text-sm col-span-2">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                {% if lead.status == 'hot' %}bg-green-100 text-green-800
+                                {% elif lead.status == 'maybe' %}bg-yellow-100 text-yellow-800
+                                {% elif lead.status == 'cold' %}bg-gray-100 text-gray-800
+                                {% else %}bg-blue-100 text-blue-800{% endif %}">
+                                {{ lead.status }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Qualification Score</dt>
+                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.qualification_score }}/100</dd>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Email Status</dt>
+                        <dd class="text-sm col-span-2">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                {% if lead.email_status == 'sent' %}bg-green-100 text-green-800
+                                {% elif lead.email_status == 'sending' %}bg-yellow-100 text-yellow-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ lead.email_status }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <dt class="text-sm font-medium text-gray-500">Notes</dt>
+                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.notes or '-' }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-6 bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-medium text-gray-900">Email History</h3>
+        </div>
+        <div class="overflow-x-auto">
+            {% if emails %}
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for email in emails %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ email.sent_at[:16].replace('T', ' ') }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ email.subject }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                {% if email.status == 'sent' %}bg-green-100 text-green-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ email.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="px-6 py-5 text-center text-gray-500">
+                No emails sent yet.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function sendEmail() {
+    const btn = document.getElementById('sendEmailBtn');
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = 'Sending...';
+    
+    fetch('/lead/{{ lead.lead_id }}/send-email', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'sent') {
+            btn.innerHTML = '✅ Sent!';
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            btn.innerHTML = '❌ Failed';
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }, 2000);
+        }
+    })
+    .catch(error => {
+        btn.innerHTML = '❌ Error';
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }, 2000);
+    });
+}
+</script>
+{% endblock %}

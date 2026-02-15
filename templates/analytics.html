@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Analytics{% endblock %}
+{% block content %}
+<div class="px-4 sm:px-0">
+    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">Analytics Dashboard</h1>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <dt class="text-sm font-medium text-gray-500 truncate">Total Campaigns</dt>
+                <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ total_campaigns }}</dd>
+            </div>
+        </div>
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <dt class="text-sm font-medium text-gray-500 truncate">Total Leads</dt>
+                <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ total_leads }}</dd>
+            </div>
+        </div>
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <dt class="text-sm font-medium text-gray-500 truncate">Hot Leads</dt>
+                <dd class="mt-1 text-3xl font-semibold text-green-600">{{ total_hot }}</dd>
+            </div>
+        </div>
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <dt class="text-sm font-medium text-gray-500 truncate">Emails Sent</dt>
+                <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ total_emails }}</dd>
+            </div>
+        </div>
+    </div>
+
+    {% for stat in stats %}
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden mb-6">
+        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-medium text-gray-900">{{ stat.campaign_name }}</h3>
+        </div>
+        <div class="px-6 py-5">
+            <dl class="grid grid-cols-1 gap-6">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <dt class="text-sm font-medium text-gray-500">Performance</dt>
+                    <dd class="text-sm text-gray-900 sm:col-span-2">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>Total Leads: {{ stat.total_leads }}</div>
+                            <div>Hot Leads: {{ stat.hot_leads }}</div>
+                            <div>Emails Sent: {{ stat.emails_sent }}</div>
+                            <div>Conversion Rate: {{ stat.conversion_rate }}%</div>
+                        </div>
+                    </dd>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <dt class="text-sm font-medium text-gray-500">Countries Found</dt>
+                    <dd class="text-sm text-gray-900 sm:col-span-2 overflow-x-auto">
+                        <pre class="text-sm whitespace-pre-wrap">{{ stat.country_breakdown }}</pre>
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

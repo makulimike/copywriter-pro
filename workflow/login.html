@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - The First Client Engine</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <h1>The First Client Engine</h1>
+            <form class="login-form" id="login-form">
+                <div class="form-group">
+                    <input type="email" placeholder="Email" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" placeholder="Password" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Login</button>
+            </form>
+            <div class="login-links">
+                <a href="#">Forgot password?</a><br>
+                <a href="#pricing">Don't have an account? Sign up</a>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            window.location.href = '/dashboard';
+        });
+    </script>
+</body>
+</html>

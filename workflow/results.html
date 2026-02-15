@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results - The First Client Engine</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">The First Client Engine</div>
+            <div class="nav-links">
+                <a href="/dashboard">Dashboard</a>
+                <a href="/campaign-setup">New Campaign</a>
+                <a href="/results">Results</a>
+                <a href="/login" class="btn btn-outline">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard">
+        <div class="container">
+            <h1>Call Results</h1>
+            
+            <div style="background: white; padding: 2rem; border-radius: 12px; margin-top: 2rem;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #e5e7eb;">
+                            <th style="text-align: left; padding: 1rem;">Date</th>
+                            <th style="text-align: left;">Lead</th>
+                            <th style="text-align: left;">Status</th>
+                            <th style="text-align: left;">Recording</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #e5e7eb;">
+                            <td style="padding: 1rem;">2026-02-13</td>
+                            <td>John Doe</td>
+                            <td><span style="color: #10b981;">Hot Lead</span></td>
+                            <td><a href="#">Listen</a></td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #e5e7eb;">
+                            <td style="padding: 1rem;">2026-02-13</td>
+                            <td>Jane Smith</td>
+                            <td><span style="color: #ef4444;">Not Interested</span></td>
+                            <td><a href="#">Listen</a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script src="/main.js"></script>
+</body>
+</html>
