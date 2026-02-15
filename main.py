@@ -1238,6 +1238,9 @@ def health_check():
 # ----------------------------------------------------------------------------
 # MAIN
 # ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# MAIN
+# ----------------------------------------------------------------------------
 
 def create_default_user():
     if not db.get_user_by_username('admin'):
@@ -1257,23 +1260,30 @@ def open_browser():
 
 def main():
     print("="*60)
-    print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - FIXED")
+    print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM")
     print("="*60)
-    print("Powered by Apify (LinkedIn + Google Maps)")
-    print("✅ FIXED: Updated to use correct Apify actors")
-    print("   - harvestapi/linkedin-company-employees")
-    print("   - compass/crawler-google-places")
+    print("Powered by Apify (LinkedIn Company Employees + Google Maps)")
+    print("No other API keys needed - just your Apify token")
+    print("Manual discovery only - click 'Find Real Businesses'")
     create_default_user()
     print("\n✅ System ready!")
     print("🔗 http://localhost:5000")
     print("👤 Login: admin / admin123")
     print("="*60)
-
+    
+    # Only open browser locally, not on Render
     if not os.environ.get('RENDER'):
         Thread(target=open_browser).start()
 
+# THIS IS THE ONLY APP.RUN CALL - EVERYTHING ELSE IS REMOVED
 if __name__ == "__main__":
+    # Get port from environment variable (for Render) or use 5000 locally
     port = int(os.environ.get("PORT", 5000))
     print(f"🚀 Starting Flask app on port {port}")
+    print(f"🌐 Binding to 0.0.0.0:{port}")
+    
+    # Small delay to ensure everything is loaded
     time.sleep(1)
-    app.run(host='0.0.0.0', port=port, debug=True)
+    
+    # Run the app - this is the ONLY place where app runs
+    app.run(host='0.0.0.0', port=port, debug=False)  # debug=False for production
