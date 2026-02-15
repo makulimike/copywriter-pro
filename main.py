@@ -1,6 +1,6 @@
 """
 FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - SIMPLIFIED
-Discover businesses via LinkedIn (via Apify), Google Places, Yelp, and Clearbit.
+Discover businesses via LinkedIn (via Apify only).
 Send cold emails with phone numbers and location targeting.
 No reply monitoring, no meeting scheduling.
 """
@@ -29,13 +29,6 @@ import re
 import webbrowser
 
 load_dotenv()
-
-# Optional dependencies
-try:
-    from bs4 import BeautifulSoup
-    BS4_AVAILABLE = True
-except ImportError:
-    BS4_AVAILABLE = False
 
 # Apify
 try:
@@ -69,13 +62,7 @@ class EmailStatus(Enum):
 class LeadSource(Enum):
     MANUAL = "manual"
     CSV = "csv"
-    LINKEDIN_SEARCH = "linkedin_search"
-    LINKEDIN_COMPANY = "linkedin_company"
-    GOOGLE_PLACES = "google_places"
-    CLEARBIT = "clearbit"
-    YELP = "yelp"
     APIFY = "apify_linkedin"
-    SAMPLE = "sample"
 
 @dataclass
 class Lead:
@@ -99,10 +86,6 @@ class Lead:
     updated_at: str = ""
     linkedin_url: str = ""
     linkedin_profile: Optional[Dict] = None
-    founded_year: Optional[int] = None
-    employee_count: Optional[str] = None
-    estimated_revenue: Optional[str] = None
-    source: str = LeadSource.MANUAL.value
     job_title: str = ""
     phone: str = ""
 
@@ -120,12 +103,9 @@ class Campaign:
     ideal_company_size: str = "any"
     ideal_job_titles: List[str] = None
     search_globally: bool = True
-    min_founded_year: Optional[int] = None
 
     email_subject: str = ""
     email_body: str = ""
-
-    # Notifications (optional)
     notify_email: str = ""
 
     def __post_init__(self):
@@ -143,7 +123,7 @@ class Campaign:
         known_fields = {
             'campaign_id', 'user_id', 'name', 'created_at', 'status',
             'ideal_industries', 'ideal_locations', 'ideal_countries',
-            'ideal_company_size', 'ideal_job_titles', 'search_globally', 'min_founded_year',
+            'ideal_company_size', 'ideal_job_titles', 'search_globally',
             'email_subject', 'email_body', 'notify_email'
         }
         filtered_data = {k: v for k, v in data.items() if k in known_fields}
@@ -172,9 +152,6 @@ class User:
     email_host: str = "smtp.gmail.com"
     email_user: str = ""
     email_password: str = ""
-    linkedin_username: str = ""
-    linkedin_password: str = ""
-    linkedin_connected: bool = False
     apify_api_token: str = ""
 
     def __post_init__(self):
@@ -225,11 +202,6 @@ class Database:
             cursor.execute(query, params)
             return cursor.rowcount
 
-    def execute_many(self, query: str, params_list: List[tuple]):
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.executemany(query, params_list)
-
     def column_exists(self, table_name: str, column_name: str) -> bool:
         cols = self.execute_query(f"PRAGMA table_info({table_name})")
         return any(col['name'] == column_name for col in cols)
@@ -239,16 +211,14 @@ class Database:
         table_names = [t['name'] for t in tables]
 
         if 'users' in table_names:
-            for col in ['email_host', 'email_user', 'email_password', 'linkedin_username', 'linkedin_password', 'linkedin_connected', 'apify_api_token']:
+            for col in ['email_host', 'email_user', 'email_password', 'apify_api_token']:
                 if not self.column_exists('users', col):
-                    dtype = "INTEGER DEFAULT 0" if col == 'linkedin_connected' else "TEXT"
-                    self.execute_query(f"ALTER TABLE users ADD COLUMN {col} {dtype}")
+                    self.execute_query(f"ALTER TABLE users ADD COLUMN {col} TEXT")
 
         if 'leads' in table_names:
-            for col in ['linkedin_url', 'linkedin_profile', 'founded_year', 'employee_count', 'estimated_revenue', 'source', 'job_title', 'phone']:
+            for col in ['linkedin_url', 'linkedin_profile', 'source', 'job_title', 'phone']:
                 if not self.column_exists('leads', col):
-                    dtype = "TEXT" if col != 'founded_year' else "INTEGER"
-                    self.execute_query(f"ALTER TABLE leads ADD COLUMN {col} {dtype}")
+                    self.execute_query(f"ALTER TABLE leads ADD COLUMN {col} TEXT")
 
     def init_db(self):
         with self.get_connection() as conn:
@@ -262,9 +232,6 @@ class Database:
                     email_host TEXT DEFAULT 'smtp.gmail.com',
                     email_user TEXT,
                     email_password TEXT,
-                    linkedin_username TEXT,
-                    linkedin_password TEXT,
-                    linkedin_connected INTEGER DEFAULT 0,
                     apify_api_token TEXT,
                     created_at TEXT NOT NULL
                 )
@@ -300,9 +267,6 @@ class Database:
                     email_sent_at TEXT,
                     linkedin_url TEXT,
                     linkedin_profile TEXT,
-                    founded_year INTEGER,
-                    employee_count TEXT,
-                    estimated_revenue TEXT,
                     source TEXT DEFAULT 'manual',
                     job_title TEXT,
                     phone TEXT,
@@ -327,26 +291,17 @@ class Database:
                 )
             ''')
 
-    # ------------------------------------------------------------------------
-    # Helper: filter row dict to only include dataclass fields
-    # ------------------------------------------------------------------------
     def _filter_to_dataclass(self, cls, data: dict) -> dict:
-        """Keep only keys that are fields of the given dataclass."""
         valid_keys = {f.name for f in fields(cls)}
         return {k: v for k, v in data.items() if k in valid_keys}
 
-    # ------------------------------------------------------------------------
-    # User methods
-    # ------------------------------------------------------------------------
     def create_user(self, user: User):
         self.execute_insert('''
             INSERT INTO users (user_id, username, password_hash, email, email_host, email_user, email_password,
-                               linkedin_username, linkedin_password, linkedin_connected, apify_api_token, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               apify_api_token, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (user.user_id, user.username, user.password_hash, user.email, user.email_host,
-              user.email_user or '', user.email_password or '',
-              user.linkedin_username or '', user.linkedin_password or '',
-              1 if user.linkedin_connected else 0, user.apify_api_token or '', user.created_at))
+              user.email_user or '', user.email_password or '', user.apify_api_token or '', user.created_at))
 
     def get_user_by_username(self, username: str) -> Optional[User]:
         row = self.execute_query('SELECT * FROM users WHERE username = ?', (username,))
@@ -366,17 +321,10 @@ class Database:
         self.execute_update('UPDATE users SET email_host = ?, email_user = ?, email_password = ? WHERE user_id = ?',
                             (email_host, email_user, email_password, user_id))
 
-    def update_user_linkedin(self, user_id: str, linkedin_username: str, linkedin_password: str):
-        self.execute_update('UPDATE users SET linkedin_username = ?, linkedin_password = ?, linkedin_connected = 1 WHERE user_id = ?',
-                            (linkedin_username, linkedin_password, user_id))
-
     def update_user_apify_token(self, user_id: str, api_token: str):
         self.execute_update('UPDATE users SET apify_api_token = ? WHERE user_id = ?',
                             (api_token, user_id))
 
-    # ------------------------------------------------------------------------
-    # Campaign methods
-    # ------------------------------------------------------------------------
     def get_user_campaigns(self, user_id: str) -> List[Campaign]:
         rows = self.execute_query('SELECT config FROM campaigns WHERE user_id = ?', (user_id,))
         campaigns = []
@@ -415,9 +363,6 @@ class Database:
             cursor.execute('DELETE FROM leads WHERE campaign_id = ?', (campaign_id,))
             cursor.execute('DELETE FROM campaigns WHERE campaign_id = ?', (campaign_id,))
 
-    # ------------------------------------------------------------------------
-    # Lead methods
-    # ------------------------------------------------------------------------
     def save_leads(self, user_id: str, campaign_id: str, leads: List[Lead]):
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -427,17 +372,15 @@ class Database:
                         lead_id, campaign_id, user_id, name, company, email, website,
                         industry, location, country, timezone, notes, status,
                         qualification_score, email_status, email_sent_at,
-                        linkedin_url, linkedin_profile, founded_year, employee_count, estimated_revenue,
-                        source, job_title, phone,
+                        linkedin_url, linkedin_profile, source, job_title, phone,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     lead.lead_id, campaign_id, user_id, lead.name, lead.company,
                     lead.email, lead.website, lead.industry, lead.location, lead.country, lead.timezone,
                     lead.notes, lead.status, lead.qualification_score,
                     lead.email_status, lead.email_sent_at,
                     lead.linkedin_url, json.dumps(lead.linkedin_profile) if lead.linkedin_profile else None,
-                    lead.founded_year, lead.employee_count, lead.estimated_revenue,
                     lead.source, lead.job_title, lead.phone,
                     lead.created_at, lead.updated_at
                 ))
@@ -476,8 +419,7 @@ class Database:
             UPDATE leads SET status = ?, qualification_score = ?,
                 email_status = ?, email_sent_at = ?,
                 country = ?, timezone = ?,
-                linkedin_url = ?, linkedin_profile = ?, founded_year = ?, employee_count = ?, estimated_revenue = ?,
-                source = ?, job_title = ?, phone = ?,
+                linkedin_url = ?, linkedin_profile = ?, source = ?, job_title = ?, phone = ?,
                 updated_at = ?
             WHERE lead_id = ?
         ''', (lead.status, lead.qualification_score,
@@ -485,7 +427,6 @@ class Database:
               lead.country, lead.timezone,
               lead.linkedin_url,
               json.dumps(lead.linkedin_profile) if lead.linkedin_profile else None,
-              lead.founded_year, lead.employee_count, lead.estimated_revenue,
               lead.source, lead.job_title, lead.phone,
               lead.updated_at, lead.lead_id))
 
@@ -499,20 +440,6 @@ class Database:
             return lead
         return None
 
-    def get_leads_by_email(self, email: str) -> List[Lead]:
-        rows = self.execute_query('SELECT * FROM leads WHERE email = ? ORDER BY created_at DESC', (email,))
-        leads = []
-        for r in rows:
-            filtered = self._filter_to_dataclass(Lead, r)
-            lead = Lead(**filtered)
-            if r.get('linkedin_profile'):
-                lead.linkedin_profile = json.loads(r['linkedin_profile'])
-            leads.append(lead)
-        return leads
-
-    # ------------------------------------------------------------------------
-    # Email methods
-    # ------------------------------------------------------------------------
     def save_email(self, user_id: str, email: EmailRecord):
         email.user_id = user_id
         self.execute_insert('''
@@ -530,7 +457,7 @@ class Database:
         return emails
 
 # ============================================================================
-# APIFY LINKEDIN DISCOVERY (Commercial LinkedIn API)
+# APIFY LINKEDIN DISCOVERY (Sole Data Source)
 # ============================================================================
 
 class ApifyLinkedInDiscovery:
@@ -542,29 +469,23 @@ class ApifyLinkedInDiscovery:
         self.authenticated = bool(api_token and APIFY_AVAILABLE and self.client)
     
     def set_api_token(self, api_token):
-        """Update the API token for this instance"""
         self.api_token = api_token
         self.client = ApifyClient(api_token) if api_token and APIFY_AVAILABLE else None
         self.authenticated = bool(api_token and APIFY_AVAILABLE and self.client)
     
-    def authenticate(self, username=None, password=None):
-        """Check if API token exists and client is available"""
+    def authenticate(self):
         return self.authenticated
     
     def search_people_by_company(self, company_name: str, job_titles: List[str] = None, max_results: int = 10) -> List[Dict]:
-        """
-        Search for people at a specific company using Apify's LinkedIn Profile Scraper
-        """
         if not self.authenticated or not self.client:
-            print("❌ Apify not configured or client unavailable")
+            print("❌ Apify not configured")
             return []
         
         leads = []
         try:
             print(f"🔍 Apify: Searching for employees at {company_name}")
             
-            # Use a working Apify actor - LinkedIn Profile Scraper by drobnikj
-            # This is a reliable actor that can search by company
+            # Build search query
             search_query = company_name
             if job_titles and len(job_titles) > 0:
                 search_query = f"{company_name} {job_titles[0]}"
@@ -574,23 +495,18 @@ class ApifyLinkedInDiscovery:
                 "maxResults": max_results,
             }
             
-            # Run the actor and wait for completion
-            run = self.client.actor("drobnikj~linkedin-people-scraper").call(
-                run_input=run_input
-            )
+            run = self.client.actor("drobnikj~linkedin-people-scraper").call(run_input=run_input)
             
-            # Get results from the dataset
             if run and run.get("defaultDatasetId"):
                 dataset = self.client.dataset(run["defaultDatasetId"])
                 for item in dataset.iterate_items():
                     # Extract name
                     name = item.get('name', '')
                     
-                    # Get current company from experience
+                    # Get current company & title from experiences
                     current_company = company_name
                     job_title = ''
                     
-                    # Try to extract current role from experiences
                     experiences = item.get('experiences', [])
                     for exp in experiences:
                         if exp.get('company', '').lower() in company_name.lower() or company_name.lower() in exp.get('company', '').lower():
@@ -612,61 +528,10 @@ class ApifyLinkedInDiscovery:
                     }
                     leads.append(lead)
                     
-                    # Limit results
                     if len(leads) >= max_results:
                         break
                         
                 print(f"✅ Apify: Found {len(leads)} employees at {company_name}")
-            else:
-                print(f"⚠️ Apify: No results for {company_name}")
-                    
-        except Exception as e:
-            print(f"❌ Apify search error: {e}")
-            
-        return leads
-    
-    def search_by_keywords(self, keywords: str, max_results: int = 20) -> List[Dict]:
-        """
-        Search LinkedIn profiles by keywords using Apify's LinkedIn Profile Scraper
-        """
-        if not self.authenticated or not self.client:
-            return []
-        
-        leads = []
-        try:
-            print(f"🔍 Apify: Searching for '{keywords}'")
-            
-            # Use Apify's LinkedIn Profile Scraper with search
-            run_input = {
-                "searchUrl": f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(keywords)}",
-                "maxResults": max_results,
-            }
-            
-            run = self.client.actor("drobnikj~linkedin-people-scraper").call(
-                run_input=run_input
-            )
-            
-            if run and run.get("defaultDatasetId"):
-                dataset = self.client.dataset(run["defaultDatasetId"])
-                for item in dataset.iterate_items():
-                    lead = {
-                        'name': item.get('name', ''),
-                        'company': item.get('company', item.get('currentCompany', '')),
-                        'job_title': item.get('title', item.get('jobTitle', '')),
-                        'linkedin_url': item.get('url', item.get('profileUrl', '')),
-                        'location': item.get('location', ''),
-                        'country': self._extract_country(item.get('location', '')),
-                        'email': item.get('email', ''),
-                        'phone': item.get('phone', ''),
-                        'industry': item.get('industry', ''),
-                        'source': LeadSource.APIFY.value
-                    }
-                    leads.append(lead)
-                    
-                    if len(leads) >= max_results:
-                        break
-                        
-                print(f"✅ Apify: Found {len(leads)} profiles for '{keywords}'")
                     
         except Exception as e:
             print(f"❌ Apify search error: {e}")
@@ -674,91 +539,21 @@ class ApifyLinkedInDiscovery:
         return leads
     
     def _extract_country(self, location: str) -> str:
-        """Extract country from location string"""
         if not location:
             return ''
         parts = location.split(',')
         return parts[-1].strip() if len(parts) > 1 else ''
 
 # ============================================================================
-# EMAIL ENRICHMENT
-# ============================================================================
-
-class EmailEnrichment:
-    def __init__(self):
-        self.hunter_api_key = os.getenv("HUNTER_API_KEY", "")
-        self.clearbit_api_key = os.getenv("CLEARBIT_API_KEY", "")
-
-    def find_email(self, name: str, company: str, domain: str = None) -> str:
-        if self.clearbit_api_key and company:
-            email = self._clearbit_email(name, company)
-            if email:
-                return email
-        if self.hunter_api_key and (domain or company):
-            email = self._hunter_email(name, domain, company)
-            if email:
-                return email
-        if company and name:
-            return self._generate_email_patterns(name, company)
-        return ""
-
-    def _clearbit_email(self, name: str, company: str) -> str:
-        try:
-            url = f"https://company.clearbit.com/v1/domains/find?name={quote_plus(company)}"
-            headers = {'Authorization': f'Bearer {self.clearbit_api_key}'}
-            resp = requests.get(url, headers=headers, timeout=5)
-            if resp.status_code == 200:
-                domain = resp.json().get('domain', '')
-                if domain:
-                    first, last = name.lower().split()[0], name.lower().split()[-1]
-                    for pattern in [f"{first}.{last}@{domain}", f"{first}{last}@{domain}", f"{first}@{domain}"]:
-                        return pattern
-        except:
-            pass
-        return ""
-
-    def _hunter_email(self, name: str, domain: str, company: str) -> str:
-        try:
-            if not domain and company:
-                url = f"https://api.hunter.io/v2/domain-search?company={quote_plus(company)}&api_key={self.hunter_api_key}"
-                resp = requests.get(url, timeout=5)
-                if resp.status_code == 200:
-                    domain = resp.json().get('data', {}).get('domain', '')
-            if domain and name:
-                first, last = name.lower().split()[0], name.lower().split()[-1]
-                url = f"https://api.hunter.io/v2/email-finder?domain={domain}&first_name={first}&last_name={last}&api_key={self.hunter_api_key}"
-                resp = requests.get(url, timeout=5)
-                if resp.status_code == 200:
-                    return resp.json().get('data', {}).get('email', '')
-        except:
-            pass
-        return ""
-
-    def _generate_email_patterns(self, name: str, company: str) -> str:
-        domain = company.lower().replace(' ', '').replace('.', '') + '.com'
-        parts = name.lower().split()
-        if len(parts) >= 2:
-            first, last = parts[0], parts[-1]
-            return f"{first}.{last}@{domain}"
-        return ""
-
-# ============================================================================
-# BUSINESS DISCOVERY (Enhanced with all sources - NO SAMPLES)
+# BUSINESS DISCOVERY (Apify Only)
 # ============================================================================
 
 class BusinessDiscovery:
     def __init__(self):
-        self.google_api_key = os.getenv("GOOGLE_PLACES_API_KEY", "")
-        self.clearbit_api_key = os.getenv("CLEARBIT_API_KEY", "")
-        self.yelp_api_key = os.getenv("YELP_API_KEY", "")
-        self.email_enricher = EmailEnrichment()
-        # Apify will be created per-user with their API token
-
+        pass  # No API keys needed except Apify token per user
+    
     def _get_companies_for_industry(self, industry: str, limit: int = 5) -> List[str]:
-        """
-        Helper method to get sample company names for an industry
-        In production, you'd use Clearbit, Google, or a database
-        """
+        """Get sample companies for an industry (can be expanded later)"""
         industry_companies = {
             'saas': ['Salesforce', 'HubSpot', 'Zoom', 'Slack', 'Atlassian'],
             'fintech': ['Stripe', 'Square', 'PayPal', 'Robinhood', 'Revolut'],
@@ -768,85 +563,42 @@ class BusinessDiscovery:
             'technology': ['Microsoft', 'Google', 'Apple', 'Amazon', 'Meta'],
             'consulting': ['McKinsey', 'BCG', 'Deloitte', 'PwC', 'Accenture'],
         }
-        
-        # Default fallback
         defaults = ['TechCorp', 'InnovateInc', 'SolutionsLLC', 'GlobalEnterprises', 'NextGen']
-        
-        companies = industry_companies.get(industry.lower(), defaults)
-        return companies[:limit]
-
+        return industry_companies.get(industry.lower(), defaults)[:limit]
+    
     def discover_businesses(self, campaign: Campaign, user_apify_token: str = None, max_businesses: int = 50) -> List[Dict]:
-        all_businesses = []
         if not campaign.ideal_industries:
             return []
-
-        print(f"🔍 Starting discovery with Apify token: {'Present' if user_apify_token else 'Missing'}")
-        print(f"🔍 Google API Key: {'Present' if self.google_api_key else 'Missing'}")
-        print(f"🔍 Yelp API Key: {'Present' if self.yelp_api_key else 'Missing'}")
-        print(f"🔍 Clearbit API Key: {'Present' if self.clearbit_api_key else 'Missing'}")
-
-        # Apify (if user has API token)
-        if user_apify_token and APIFY_AVAILABLE:
-            try:
-                apify = ApifyLinkedInDiscovery(user_apify_token)
-                if apify.authenticate():
-                    print("✅ Apify authenticated successfully")
-                    # For each industry, get some companies and search for employees
-                    for industry in campaign.ideal_industries[:2]:
-                        companies = self._get_companies_for_industry(industry, limit=3)
-                        print(f"🔍 Searching {industry} companies: {companies}")
-                        for company in companies:
-                            print(f"🔍 Calling Apify for {company}")
-                            leads = apify.search_people_by_company(
-                                company,
-                                job_titles=campaign.ideal_job_titles,
-                                max_results=max_businesses // 6
-                            )
-                            print(f"✅ Apify returned {len(leads)} leads for {company}")
-                            all_businesses.extend(leads)
-                            
-                            # Add a small delay to avoid rate limits
-                            time.sleep(1)
-                else:
-                    print("❌ Apify authentication failed - check your token")
-            except Exception as e:
-                print(f"❌ Apify error: {e}")
-        else:
-            print(f"❌ Apify not available - token: {bool(user_apify_token)}, APIFY_AVAILABLE: {APIFY_AVAILABLE}")
-
-        # Google Places (with phone numbers)
-        if self.google_api_key:
-            try:
-                print("🔍 Searching Google Places...")
-                businesses = self._search_google_places(campaign, max_businesses // 3)
-                print(f"✅ Google Places returned {len(businesses)} businesses")
-                all_businesses.extend(businesses)
-            except Exception as e:
-                print(f"❌ Google Places error: {e}")
-
-        # Clearbit (with phone numbers)
-        if self.clearbit_api_key:
-            try:
-                print("🔍 Searching Clearbit...")
-                businesses = self._search_clearbit(campaign, max_businesses // 3)
-                print(f"✅ Clearbit returned {len(businesses)} businesses")
-                all_businesses.extend(businesses)
-            except Exception as e:
-                print(f"❌ Clearbit error: {e}")
-
-        # Yelp (already has phone numbers)
-        if self.yelp_api_key:
-            try:
-                print("🔍 Searching Yelp...")
-                businesses = self._search_yelp(campaign, max_businesses // 3)
-                print(f"✅ Yelp returned {len(businesses)} businesses")
-                all_businesses.extend(businesses)
-            except Exception as e:
-                print(f"❌ Yelp error: {e}")
-
-        # NO SAMPLE DATA - only return real results
-        print(f"✅ Total real businesses found: {len(all_businesses)}")
-
+        
+        if not user_apify_token or not APIFY_AVAILABLE:
+            print("❌ Apify token missing - no leads can be found")
+            return []
+        
+        all_businesses = []
+        
+        try:
+            apify = ApifyLinkedInDiscovery(user_apify_token)
+            if not apify.authenticate():
+                print("❌ Apify authentication failed")
+                return []
+            
+            # Search each industry
+            for industry in campaign.ideal_industries[:3]:
+                companies = self._get_companies_for_industry(industry, limit=3)
+                print(f"🔍 Searching {industry} companies: {companies}")
+                
+                for company in companies:
+                    leads = apify.search_people_by_company(
+                        company,
+                        job_titles=campaign.ideal_job_titles,
+                        max_results=max_businesses // 6
+                    )
+                    all_businesses.extend(leads)
+                    time.sleep(1)  # Avoid rate limits
+                    
+        except Exception as e:
+            print(f"❌ Discovery error: {e}")
+        
         # Deduplicate
         seen = set()
         unique = []
@@ -855,129 +607,9 @@ class BusinessDiscovery:
             if key not in seen:
                 seen.add(key)
                 unique.append(b)
-
+        
+        print(f"✅ Found {len(unique)} real leads")
         return unique[:max_businesses]
-
-    def _search_google_places(self, campaign: Campaign, limit: int) -> List[Dict]:
-        businesses = []
-        for industry in campaign.ideal_industries[:3]:
-            for location in (campaign.ideal_locations or [''])[:2]:
-                if not location and not campaign.search_globally:
-                    continue
-                search_location = location if location else "United States"
-                
-                url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-                params = {'query': f"{industry} companies in {search_location}", 'key': self.google_api_key}
-                try:
-                    resp = requests.get(url, params=params, timeout=10).json()
-                    if resp.get('status') == 'OK':
-                        for place in resp.get('results', [])[:limit]:
-                            # Fetch details to get phone number
-                            details_url = "https://maps.googleapis.com/maps/api/place/details/json"
-                            details_params = {
-                                'place_id': place['place_id'],
-                                'fields': 'formatted_phone_number,international_phone_number',
-                                'key': self.google_api_key
-                            }
-                            details = requests.get(details_url, params=details_params, timeout=5).json()
-                            phone = details.get('result', {}).get('formatted_phone_number', '')
-                            
-                            # Extract country from address
-                            address = place.get('formatted_address', '')
-                            country = 'United States'  # Default
-                            if ',' in address:
-                                parts = address.split(',')
-                                country = parts[-1].strip()
-                            
-                            businesses.append({
-                                'name': f"Contact at {place.get('name', '')}",
-                                'company': place.get('name', ''),
-                                'location': place.get('formatted_address', '').split(',')[0],
-                                'country': country,
-                                'industry': industry,
-                                'phone': phone,
-                                'source': LeadSource.GOOGLE_PLACES.value
-                            })
-                except:
-                    continue
-        return businesses
-
-    def _search_clearbit(self, campaign: Campaign, limit: int) -> List[Dict]:
-        businesses = []
-        headers = {'Authorization': f'Bearer {self.clearbit_api_key}'}
-        for industry in campaign.ideal_industries[:3]:
-            url = f"https://autocomplete.clearbit.com/v1/companies/suggest?query={quote_plus(industry)}"
-            try:
-                resp = requests.get(url, headers=headers, timeout=10).json()
-                for company in resp[:limit]:
-                    phone = ''
-                    # Try to get more details from Company API
-                    if company.get('domain'):
-                        company_url = f"https://company.clearbit.com/v2/companies/find?domain={company['domain']}"
-                        company_resp = requests.get(company_url, headers=headers, timeout=5)
-                        if company_resp.status_code == 200:
-                            company_data = company_resp.json()
-                            phone = company_data.get('phone', '')
-                    
-                    # Determine location from company data if available
-                    location = company.get('location', '')
-                    country = 'United States'  # Default
-                    if location and ',' in location:
-                        parts = location.split(',')
-                        country = parts[-1].strip()
-                    
-                    businesses.append({
-                        'name': f"Contact at {company.get('name', '')}",
-                        'company': company.get('name', ''),
-                        'domain': company.get('domain', ''),
-                        'website': f"https://{company.get('domain', '')}",
-                        'email': f"hello@{company.get('domain', '')}",
-                        'phone': phone,
-                        'location': location,
-                        'country': country,
-                        'industry': industry,
-                        'source': LeadSource.CLEARBIT.value
-                    })
-            except:
-                continue
-        return businesses
-
-    def _search_yelp(self, campaign: Campaign, limit: int) -> List[Dict]:
-        businesses = []
-        headers = {'Authorization': f'Bearer {self.yelp_api_key}'}
-        for industry in campaign.ideal_industries[:2]:
-            for location in (campaign.ideal_locations or [''])[:2]:
-                if not location and not campaign.search_globally:
-                    continue
-                search_location = location if location else "New York"
-                
-                url = "https://api.yelp.com/v3/businesses/search"
-                params = {'term': industry, 'location': search_location, 'limit': limit}
-                try:
-                    resp = requests.get(url, params=params, headers=headers, timeout=10).json()
-                    for biz in resp.get('businesses', [])[:limit]:
-                        businesses.append({
-                            'name': f"Contact at {biz.get('name', '')}",
-                            'company': biz.get('name', ''),
-                            'website': biz.get('url', ''),
-                            'phone': biz.get('phone', ''),
-                            'location': biz.get('location', {}).get('city', ''),
-                            'country': biz.get('location', {}).get('country', ''),
-                            'industry': industry,
-                            'source': LeadSource.YELP.value
-                        })
-                except:
-                    continue
-        return businesses
-
-    def _extract_domain(self, website: str) -> str:
-        if not website:
-            return ""
-        try:
-            parsed = urlparse(website)
-            return (parsed.netloc or parsed.path).replace('www.', '')
-        except:
-            return ""
 
 # ============================================================================
 # EMAIL SERVICE
@@ -1090,7 +722,7 @@ class LeadProcessor:
         if lead.linkedin_url:
             score += 10
         if lead.phone:
-            score += 5  # Bonus for having phone number
+            score += 5
         return min(100, score)
 
 # ============================================================================
@@ -1104,15 +736,13 @@ class AnalyticsEngine:
         if not campaign:
             return {}
         leads = db.get_campaign_leads(user_id, campaign_id)
-        emails = db.execute_query('SELECT * FROM emails WHERE campaign_id = ? AND user_id = ?', (campaign_id, user_id))
-
+        
         total = len(leads)
         sent = len([l for l in leads if l.email_status == EmailStatus.SENT.value])
         hot = len([l for l in leads if l.status == LeadStatus.QUALIFIED_HOT.value])
         cold = len([l for l in leads if l.status == LeadStatus.COLD.value])
         with_phone = len([l for l in leads if l.phone])
 
-        # Simple country breakdown as a string
         countries = {}
         for l in leads:
             if l.country:
@@ -1142,7 +772,6 @@ CORS(app)
 db = Database()
 email_service = EmailService()
 business_discovery = BusinessDiscovery()
-email_enricher = EmailEnrichment()
 analytics = AnalyticsEngine()
 
 # ----------------------------------------------------------------------------
@@ -1196,11 +825,11 @@ def logout():
     return redirect(url_for('index'))
 
 # ----------------------------------------------------------------------------
-# APIFY LINKEDIN SETTINGS
+# APIFY SETTINGS
 # ----------------------------------------------------------------------------
 
-@app.route('/settings/linkedin', methods=['GET', 'POST'])
-def linkedin_settings():
+@app.route('/settings/apify', methods=['GET', 'POST'])
+def apify_settings():
     if 'user_id' not in session:
         return redirect(url_for('index'))
     
@@ -1211,17 +840,15 @@ def linkedin_settings():
         return redirect(url_for('index'))
     
     if request.method == 'POST':
-        # Save Apify API token
         apify_token = request.form.get('apify_api_token', '').strip()
         
         if apify_token:
             db.update_user_apify_token(user.user_id, apify_token)
             
-            # Test the token
             if APIFY_AVAILABLE:
                 test_discovery = ApifyLinkedInDiscovery(apify_token)
                 if test_discovery.authenticate():
-                    flash('Apify API token saved and verified! You can now search LinkedIn.', 'success')
+                    flash('Apify API token saved and verified!', 'success')
                 else:
                     flash('Token saved but verification failed. Please check your token.', 'warning')
             else:
@@ -1231,7 +858,7 @@ def linkedin_settings():
         
         return redirect(url_for('dashboard'))
     
-    return render_template('linkedin_settings.html', user=user)
+    return render_template('apify_settings.html', user=user)
 
 # ----------------------------------------------------------------------------
 # EMAIL SETTINGS
@@ -1303,45 +930,8 @@ def new_campaign():
         )
         db.save_campaign(session['user_id'], campaign)
 
-        # Capture user_id and apify token for background thread
-        uid = session['user_id']
-        cid = campaign.campaign_id
-        user = db.get_user(uid)
-        apify_token = user.apify_api_token if user else None
-
-        def discover(uid, cid, campaign, apify_token):
-            time.sleep(2)
-            
-            discovered = business_discovery.discover_businesses(campaign, user_apify_token=apify_token, max_businesses=25)
-            leads = []
-            for i, biz in enumerate(discovered):
-                lead = Lead(
-                    lead_id=f"lead_{int(time.time())}_{i}_{random.randint(1000,9999)}",
-                    campaign_id=cid,
-                    user_id=uid,
-                    name=biz.get('name', 'Contact'),
-                    company=biz.get('company', biz.get('name', 'Unknown')),
-                    email=biz.get('email', ''),
-                    website=biz.get('website', ''),
-                    industry=biz.get('industry', campaign.ideal_industries[0] if campaign.ideal_industries else ''),
-                    location=biz.get('location', ''),
-                    country=biz.get('country', 'United States'),
-                    job_title=biz.get('job_title', ''),
-                    linkedin_url=biz.get('linkedin_url', ''),
-                    linkedin_profile=biz.get('linkedin_profile'),
-                    source=biz.get('source', LeadSource.SAMPLE.value),
-                    status=LeadStatus.PENDING.value,
-                    qualification_score=50,
-                    phone=biz.get('phone', ''),
-                    created_at=datetime.datetime.now().isoformat(),
-                    updated_at=datetime.datetime.now().isoformat()
-                )
-                leads.append(lead)
-            db.save_leads(uid, cid, leads)
-            print(f"✅ Discovered {len(leads)} leads for {campaign.name}")
-
-        Thread(target=discover, args=(uid, cid, campaign, apify_token)).start()
-        flash('Campaign created! Leads are being discovered in background.', 'success')
+        # No automatic discovery - user must click button
+        flash('Campaign created! Click "Find Real Businesses" to start discovering leads.', 'success')
         return redirect(url_for('campaign_detail', campaign_id=campaign.campaign_id))
 
     return render_template('campaign_form.html')
@@ -1398,7 +988,6 @@ def send_emails(campaign_id):
         flash('No leads with email addresses', 'info')
         return redirect(url_for('campaign_detail', campaign_id=campaign_id))
 
-    # Update status to sending
     for lead in leads:
         lead.email_status = EmailStatus.SENDING.value
         db.update_lead(lead)
@@ -1420,51 +1009,25 @@ def send_emails(campaign_id):
     Thread(target=send, args=(uid, cid, campaign, leads)).start()
     return redirect(url_for('campaign_detail', campaign_id=campaign_id))
 
-# ----------------------------------------------------------------------------
-# ADDITIONAL ROUTES
-# ----------------------------------------------------------------------------
-
 @app.route('/campaign/<campaign_id>/discover-businesses', methods=['POST'])
-def discover_businesses_alias(campaign_id):
-    """Alias for discover-more to match frontend expectations."""
-    return discover_more(campaign_id)
-
-@app.route('/campaign/<campaign_id>/email-progress', methods=['GET'])
-def email_progress(campaign_id):
-    """Return JSON with email sending progress."""
-    if 'user_id' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-    campaign = db.get_campaign(campaign_id)
-    if not campaign:
-        return jsonify({'error': 'Campaign not found'}), 404
-    leads = db.get_campaign_leads(session['user_id'], campaign_id)
-    total_with_email = len([l for l in leads if l.email and '@' in l.email])
-    sent = len([l for l in leads if l.email_status == EmailStatus.SENT.value])
-    sending = len([l for l in leads if l.email_status == EmailStatus.SENDING.value])
-    failed = len([l for l in leads if l.email_status == EmailStatus.FAILED.value])
-    return jsonify({
-        'total': total_with_email,
-        'sent': sent,
-        'sending': sending,
-        'failed': failed,
-        'campaign_name': campaign.name
-    })
-
-@app.route('/campaign/<campaign_id>/discover-more', methods=['POST'])
-def discover_more(campaign_id):
-    """Manually trigger lead discovery (when user clicks button)."""
+def discover_businesses(campaign_id):
     if 'user_id' not in session:
         return redirect(url_for('index'))
     campaign = db.get_campaign(campaign_id)
     if not campaign:
         flash('Campaign not found', 'error')
         return redirect(url_for('dashboard'))
-    flash('Starting additional discovery...', 'success')
+    
+    flash('Starting discovery with Apify...', 'success')
 
     uid = session['user_id']
     cid = campaign_id
     user = db.get_user(uid)
     apify_token = user.apify_api_token if user else None
+
+    if not apify_token:
+        flash('Please add your Apify API token in Settings first!', 'error')
+        return redirect(url_for('apify_settings'))
 
     def discover(uid, cid, campaign, apify_token):
         discovered = business_discovery.discover_businesses(campaign, user_apify_token=apify_token, max_businesses=25)
@@ -1484,19 +1047,39 @@ def discover_more(campaign_id):
                 job_title=biz.get('job_title', ''),
                 linkedin_url=biz.get('linkedin_url', ''),
                 linkedin_profile=biz.get('linkedin_profile'),
-                source=biz.get('source', LeadSource.SAMPLE.value),
+                source=biz.get('source', LeadSource.APIFY.value),
                 status=LeadStatus.PENDING.value,
-                qualification_score=60,
+                qualification_score=50,
                 phone=biz.get('phone', ''),
                 created_at=datetime.datetime.now().isoformat(),
                 updated_at=datetime.datetime.now().isoformat()
             )
             leads.append(lead)
         db.save_leads(uid, cid, leads)
-        print(f"✅ Added {len(leads)} more leads")
+        print(f"✅ Discovered {len(leads)} leads for {campaign.name}")
 
     Thread(target=discover, args=(uid, cid, campaign, apify_token)).start()
     return redirect(url_for('campaign_detail', campaign_id=campaign_id))
+
+@app.route('/campaign/<campaign_id>/email-progress', methods=['GET'])
+def email_progress(campaign_id):
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    campaign = db.get_campaign(campaign_id)
+    if not campaign:
+        return jsonify({'error': 'Campaign not found'}), 404
+    leads = db.get_campaign_leads(session['user_id'], campaign_id)
+    total_with_email = len([l for l in leads if l.email and '@' in l.email])
+    sent = len([l for l in leads if l.email_status == EmailStatus.SENT.value])
+    sending = len([l for l in leads if l.email_status == EmailStatus.SENDING.value])
+    failed = len([l for l in leads if l.email_status == EmailStatus.FAILED.value])
+    return jsonify({
+        'total': total_with_email,
+        'sent': sent,
+        'sending': sending,
+        'failed': failed,
+        'campaign_name': campaign.name
+    })
 
 # ----------------------------------------------------------------------------
 # LEAD ROUTES
@@ -1531,22 +1114,6 @@ def send_lead_email(lead_id):
     db.update_lead(lead)
     return jsonify({'status': email.status, 'message': 'Email sent' if email.status == EmailStatus.SENT.value else 'Failed'})
 
-@app.route('/lead/<lead_id>/enrich', methods=['POST'])
-def enrich_lead(lead_id):
-    if 'user_id' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-    lead = db.get_lead(lead_id)
-    if not lead:
-        return jsonify({'error': 'Lead not found'}), 404
-    if not lead.email and lead.name and lead.company:
-        email = email_enricher.find_email(lead.name, lead.company)
-        if email:
-            lead.email = email
-            lead.email_status = EmailStatus.PENDING.value
-            db.update_lead(lead)
-            return jsonify({'success': True, 'email': email})
-    return jsonify({'success': False})
-
 # ----------------------------------------------------------------------------
 # ANALYTICS
 # ----------------------------------------------------------------------------
@@ -1566,12 +1133,11 @@ def analytics_dashboard():
                            total_with_phone=total_with_phone, total_campaigns=len(campaigns))
 
 # ----------------------------------------------------------------------------
-# HEALTH CHECK (for Render)
+# HEALTH CHECK
 # ----------------------------------------------------------------------------
 
 @app.route('/health', methods=['GET', 'HEAD'])
 def health_check():
-    """Simple health check endpoint for Render."""
     return '', 200
 
 # ----------------------------------------------------------------------------
@@ -1596,30 +1162,22 @@ def open_browser():
 
 def main():
     print("="*60)
-    print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM (Simplified)")
+    print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM")
     print("="*60)
-    print("Discover businesses via Google, Yelp, Clearbit, and LinkedIn (via Apify)")
-    print("Phone numbers are automatically extracted when available.")
-    print("Location targeting based on campaign settings.")
-    print("No reply monitoring, no meeting scheduling.")
-    print("NO SAMPLE DATA - only real business results")
+    print("Powered by Apify LinkedIn Scraper")
+    print("No API keys needed - just your Apify token")
+    print("Manual discovery only - click 'Find Real Businesses'")
     create_default_user()
     print("\n✅ System ready!")
     print("🔗 http://localhost:5000")
     print("👤 Login: admin / admin123")
     print("="*60)
     
-    # Only open browser locally, not on Render
     if not os.environ.get('RENDER'):
         Thread(target=open_browser).start()
 
 if __name__ == "__main__":
-    # Get port from environment variable (for Render) or use 5000 locally
     port = int(os.environ.get("PORT", 5000))
     print(f"🚀 Starting Flask app on port {port}")
-    
-    # Small delay to ensure everything is loaded
     time.sleep(1)
-    
-    # Run the app - this is the ONLY app.run() call
     app.run(host='0.0.0.0', port=port, debug=True)
