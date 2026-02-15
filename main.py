@@ -1315,6 +1315,7 @@ def new_campaign():
 
         def discover(uid, cid, campaign, apify_token):
             time.sleep(2)
+            
             discovered = business_discovery.discover_businesses(campaign, user_apify_token=apify_token, max_businesses=25)
             leads = []
             for i, biz in enumerate(discovered):
@@ -1334,7 +1335,7 @@ def new_campaign():
                     linkedin_profile=biz.get('linkedin_profile'),
                     source=biz.get('source', LeadSource.SAMPLE.value),
                     status=LeadStatus.PENDING.value,
-                    qualification_score=LeadProcessor.score_lead(Lead(**biz), campaign) if 'email' in biz else 50,
+                    qualification_score=50,  # We'll calculate properly when the lead is fully created
                     phone=biz.get('phone', ''),
                     created_at=datetime.datetime.now().isoformat(),
                     updated_at=datetime.datetime.now().isoformat()
