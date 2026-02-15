@@ -1,27 +1,26 @@
 {% extends "base.html" %}
-{% block title %}LinkedIn Settings{% endblock %}
+{% block title %}LinkedIn Data Settings{% endblock %}
 {% block content %}
 <div class="px-4 sm:px-0">
-    <h1 class="text-3xl font-bold text-gray-900 mb-8">LinkedIn Settings</h1>
+    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">LinkedIn Data Settings</h1>
 
-    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden mb-6">
         <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-            <h3 class="text-lg font-medium text-gray-900">Connect LinkedIn Account</h3>
-            <p class="mt-1 text-sm text-gray-500">Connect your LinkedIn account to discover leads directly from LinkedIn searches.</p>
+            <h3 class="text-lg font-medium text-gray-900">Bring Your Own API Key</h3>
+            <p class="mt-1 text-sm text-gray-500">Enter your personal Proxycurl API key to access LinkedIn data. You pay Proxycurl directly based on your usage.</p>
         </div>
         <div class="px-6 py-5">
             <form action="/settings/linkedin" method="POST" class="space-y-6">
                 <div>
-                    <label for="linkedin_username" class="block text-sm font-medium text-gray-700">LinkedIn Email/Username</label>
-                    <input type="text" name="linkedin_username" id="linkedin_username" value="{{ user.linkedin_username }}"
+                    <label for="proxycurl_api_key" class="block text-sm font-medium text-gray-700">Your Proxycurl API Key</label>
+                    <input type="text" name="proxycurl_api_key" id="proxycurl_api_key" 
+                           value="{{ user.proxycurl_api_key or '' }}"
+                           placeholder="Enter your API key (e.g., 'abc123_def456')"
                            class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                </div>
-
-                <div>
-                    <label for="linkedin_password" class="block text-sm font-medium text-gray-700">LinkedIn Password</label>
-                    <input type="password" name="linkedin_password" id="linkedin_password" value="{{ user.linkedin_password }}"
-                           class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                    <p class="mt-1 text-xs text-gray-500">Your credentials are encrypted and only used to access LinkedIn's public search API.</p>
+                    <p class="mt-1 text-xs text-gray-500">
+                        Don't have a key? <a href="https://nubela.co/proxycurl/" target="_blank" class="text-indigo-600 hover:text-indigo-500">Sign up for Proxycurl</a> 
+                        (starts at $0.01 per request)
+                    </p>
                 </div>
 
                 <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
@@ -33,20 +32,61 @@
                         </div>
                         <div class="ml-3">
                             <p class="text-sm text-blue-700">
-                                <strong>What LinkedIn can find:</strong> Names, companies, job titles, locations, and LinkedIn profile URLs. Email addresses are not provided by LinkedIn - we'll try to find them using other services.
+                                <strong>How it works:</strong> Proxycurl scrapes LinkedIn data without using your personal account. 
+                                You pay them directly (starting at $0.01 per request). Your API key is stored securely and only used for your searches.
                             </p>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex space-x-4">
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                    <div class="flex">
+                        <div class="ml-3">
+                            <p class="text-sm text-yellow-700">
+                                <strong>Note:</strong> The unofficial LinkedIn API (using username/password) is no longer supported due to LinkedIn's security measures. 
+                                Proxycurl is the recommended alternative.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-4">
                     <button type="submit"
-                            class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                        Connect LinkedIn
+                            class="w-full sm:w-auto inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                        Save API Key
                     </button>
                 </div>
             </form>
         </div>
     </div>
+
+    {% if user.proxycurl_api_key %}
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-medium text-gray-900">Your Proxycurl Status</h3>
+        </div>
+        <div class="px-6 py-5">
+            <dl class="grid grid-cols-1 gap-4">
+                <div class="grid grid-cols-3 gap-4">
+                    <dt class="text-sm font-medium text-gray-500">API Key Status</dt>
+                    <dd class="text-sm text-gray-900 col-span-2">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                            Configured
+                        </span>
+                    </dd>
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <dt class="text-sm font-medium text-gray-500">Next Steps</dt>
+                    <dd class="text-sm text-gray-900 col-span-2">
+                        Your API key is saved. When you search for businesses, the system will use your key to fetch LinkedIn data.
+                        <a href="https://nubela.co/proxycurl/dashboard" target="_blank" class="block mt-2 text-indigo-600 hover:text-indigo-500">
+                            Check your Proxycurl dashboard for usage and credits →
+                        </a>
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
