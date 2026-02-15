@@ -4,7 +4,7 @@
 <div class="px-4 sm:px-0">
     <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">Analytics Dashboard</h1>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
         <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
             <div class="px-4 py-5 sm:p-6">
                 <dt class="text-sm font-medium text-gray-500 truncate">Total Campaigns</dt>
@@ -29,6 +29,12 @@
                 <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ total_emails }}</dd>
             </div>
         </div>
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <dt class="text-sm font-medium text-gray-500 truncate">Leads with Phone</dt>
+                <dd class="mt-1 text-3xl font-semibold text-indigo-600">{{ total_with_phone }}</dd>
+            </div>
+        </div>
     </div>
 
     {% for stat in stats %}
@@ -41,19 +47,21 @@
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <dt class="text-sm font-medium text-gray-500">Performance</dt>
                     <dd class="text-sm text-gray-900 sm:col-span-2">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>Total Leads: {{ stat.total_leads }}</div>
-                            <div>Hot Leads: {{ stat.hot_leads }}</div>
-                            <div>Emails Sent: {{ stat.emails_sent }}</div>
-                            <div>Conversion Rate: {{ stat.conversion_rate }}%</div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            <div>Total Leads: <span class="font-semibold">{{ stat.total_leads }}</span></div>
+                            <div>Hot Leads: <span class="font-semibold text-green-600">{{ stat.hot_leads }}</span></div>
+                            <div>Cold Leads: <span class="font-semibold text-gray-600">{{ stat.cold_leads }}</span></div>
+                            <div>Emails Sent: <span class="font-semibold">{{ stat.emails_sent }}</span></div>
+                            <div>With Phone: <span class="font-semibold text-indigo-600">{{ stat.leads_with_phone }}</span></div>
+                            <div>Conversion Rate: <span class="font-semibold">{{ stat.conversion_rate }}%</span></div>
                         </div>
                     </dd>
                 </div>
                 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <dt class="text-sm font-medium text-gray-500">Countries Found</dt>
+                    <dt class="text-sm font-medium text-gray-500">Countries Found ({{ stat.countries_found }})</dt>
                     <dd class="text-sm text-gray-900 sm:col-span-2 overflow-x-auto">
-                        <pre class="text-sm whitespace-pre-wrap">{{ stat.country_breakdown }}</pre>
+                        <pre class="text-sm whitespace-pre-wrap bg-gray-50 p-3 rounded">{{ stat.country_breakdown or 'None' }}</pre>
                     </dd>
                 </div>
             </dl>

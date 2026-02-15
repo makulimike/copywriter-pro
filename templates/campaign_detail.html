@@ -6,6 +6,12 @@
         <div>
             <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">{{ campaign.name }}</h1>
             <p class="mt-1 text-sm text-gray-500">Created: {{ campaign.created_at[:10] }}</p>
+            {% if campaign.ideal_locations %}
+            <p class="mt-1 text-sm text-gray-500">Target Locations: {{ campaign.ideal_locations|join(', ') }}</p>
+            {% endif %}
+            {% if campaign.ideal_countries %}
+            <p class="mt-1 text-sm text-gray-500">Target Countries: {{ campaign.ideal_countries|join(', ') }}</p>
+            {% endif %}
         </div>
         <div class="flex flex-wrap gap-3">
             <form action="/campaign/{{ campaign.campaign_id }}/discover-businesses" method="POST" class="inline">
@@ -71,7 +77,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
         <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
             <div class="px-4 py-5 sm:p-6">
                 <dt class="text-sm font-medium text-gray-500 truncate">Total Leads</dt>
@@ -88,6 +94,12 @@
             <div class="px-4 py-5 sm:p-6">
                 <dt class="text-sm font-medium text-gray-500 truncate">Emails Sent</dt>
                 <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ stats.emails_sent }}</dd>
+            </div>
+        </div>
+        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <dt class="text-sm font-medium text-gray-500 truncate">With Phone</dt>
+                <dd class="mt-1 text-3xl font-semibold text-indigo-600">{{ stats.leads_with_phone }}</dd>
             </div>
         </div>
     </div>
@@ -117,7 +129,7 @@
                         Upload
                     </button>
                 </div>
-                <p class="mt-2 text-xs text-gray-500">CSV should have columns: name, company, email, website, industry, location, country, phone</p>
+                <p class="mt-2 text-xs text-gray-500">CSV should have columns: name, company, email, website, industry, location, country, phone, linkedin_url, job_title</p>
             </form>
         </div>
     </div>
@@ -132,9 +144,11 @@
                     <tr>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job Title</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Industry</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Country</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
@@ -146,10 +160,12 @@
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ lead.name }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.company }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.job_title or '-' }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.email }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.phone }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.industry }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.country }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.phone or '-' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.industry or '-' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.location or '-' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.country or '-' }}</td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                                 {% if lead.status == 'hot' %}bg-green-100 text-green-800
@@ -169,6 +185,9 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ lead.qualification_score }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             <a href="/lead/{{ lead.lead_id }}" class="text-indigo-600 hover:text-indigo-900">View</a>
+                            {% if lead.linkedin_url %}
+                            | <a href="{{ lead.linkedin_url }}" target="_blank" class="text-blue-600 hover:text-blue-900">LinkedIn</a>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -177,8 +196,6 @@
         </div>
     </div>
 </div>
-
-
 
 <script>
 document.getElementById('sendEmailsForm').addEventListener('submit', function(e) {
