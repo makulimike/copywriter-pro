@@ -497,8 +497,8 @@ class ApifyDiscovery:
                 "maxResults": max_results,
             }
 
-            print(f"🚀 Calling Apify actor: apify~linkedin-profile-scraper")
-            run = self.client.actor("apify~linkedin-profile-scraper").call(run_input=run_input)
+            print(f"🚀 Calling Apify actor: apify/linkedin-profile-scraper")
+            run = self.client.actor("apify/linkedin-profile-scraper").call(run_input=run_input)
 
             if run and run.get("defaultDatasetId"):
                 dataset = self.client.dataset(run["defaultDatasetId"])
@@ -533,7 +533,7 @@ class ApifyDiscovery:
         return leads
 
     def search_google_maps(self, search_term: str, location: str = "", max_results: int = 20) -> List[Dict]:
-        """Search for businesses on Google Maps using Apify's Google Maps Scraper."""
+        """Search for businesses on Google Maps using Apify's official Google Maps Scraper."""
         if not self.authenticated or not self.client:
             print("❌ Apify not configured")
             return []
@@ -549,7 +549,7 @@ class ApifyDiscovery:
                 "includeReviews": False,
             }
 
-            run = self.client.actor("apify~google-maps-scraper").call(run_input=run_input)
+            run = self.client.actor("apify/google-maps-scraper").call(run_input=run_input)
 
             if run and run.get("defaultDatasetId"):
                 dataset = self.client.dataset(run["defaultDatasetId"])
@@ -670,8 +670,6 @@ class BusinessDiscovery:
                         )
                         all_businesses.extend(leads)
                         time.sleep(1)
-
-            # --- Additional sources can be added here ---
 
         except Exception as e:
             print(f"❌ Discovery error: {e}")
