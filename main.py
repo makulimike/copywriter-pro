@@ -460,7 +460,7 @@ class Database:
 # ============================================================================
 
 class ApifyLinkedInDiscovery:
-    """LinkedIn data discovery using Apify's LinkedIn Profile Scraper (curcon~linkedin-people-scraper)"""
+    """LinkedIn data discovery using Apify's LinkedIn People Scraper (drobnikj~linkedin-people-scraper)"""
     
     def __init__(self, api_token=None):
         self.api_token = api_token
@@ -478,7 +478,7 @@ class ApifyLinkedInDiscovery:
     def search_people_by_company(self, company_name: str, job_titles: List[str] = None, max_results: int = 10) -> List[Dict]:
         """
         Search for people at a specific company using Apify's LinkedIn People Scraper.
-        Uses the reliable actor 'curcon~linkedin-people-scraper'.
+        Uses the reliable actor 'drobnikj~linkedin-people-scraper'.
         """
         if not self.authenticated or not self.client:
             print("❌ Apify not configured or client unavailable")
@@ -491,17 +491,15 @@ class ApifyLinkedInDiscovery:
             # Build search query: LinkedIn profiles mentioning the company
             query = f"site:linkedin.com/in/ \"{company_name}\""
             if job_titles and len(job_titles) > 0:
-                # Add first job title to narrow down
                 query += f" \"{job_titles[0]}\""
             
             run_input = {
-                "queries": [query],
+                "searchUrl": f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(query)}",
                 "maxResults": max_results,
-                "scrapeContactInfo": True,  # Attempt to get emails/phones
             }
             
-            print(f"🚀 Calling Apify actor: curcon~linkedin-people-scraper with query: {query}")
-            run = self.client.actor("curcon~linkedin-people-scraper").call(
+            print(f"🚀 Calling Apify actor: drobnikj~linkedin-people-scraper with query: {query}")
+            run = self.client.actor("drobnikj~linkedin-people-scraper").call(
                 run_input=run_input
             )
             
@@ -509,27 +507,13 @@ class ApifyLinkedInDiscovery:
                 dataset = self.client.dataset(run["defaultDatasetId"])
                 count = 0
                 for item in dataset.iterate_items():
-                    # Extract name
-                    name = item.get('name', '')
-                    if not name:
-                        name = f"{item.get('firstName', '')} {item.get('lastName', '')}".strip()
-                    
-                    # Get current job title from positions
-                    job_title = ''
-                    positions = item.get('positions', [])
-                    if positions and len(positions) > 0:
-                        job_title = positions[0].get('title', '')
-                    
-                    # Get location
-                    location = item.get('location', '')
-                    
                     lead = {
-                        'name': name,
+                        'name': item.get('name', ''),
                         'company': company_name,
-                        'job_title': job_title,
+                        'job_title': item.get('title', item.get('jobTitle', '')),
                         'linkedin_url': item.get('url', item.get('profileUrl', '')),
-                        'location': location,
-                        'country': self._extract_country(location),
+                        'location': item.get('location', ''),
+                        'country': self._extract_country(item.get('location', '')),
                         'email': item.get('email', ''),
                         'phone': item.get('phone', ''),
                         'industry': item.get('industry', ''),
@@ -537,15 +521,11 @@ class ApifyLinkedInDiscovery:
                     }
                     leads.append(lead)
                     count += 1
-                    
                     if count >= max_results:
                         break
-                        
                 print(f"✅ Apify: Found {len(leads)} employees at {company_name}")
             else:
                 print(f"⚠️ Apify: No results for {company_name}")
-                if run:
-                    print(f"   Run info: {run}")
                     
         except Exception as e:
             print(f"❌ Apify search error: {e}")
@@ -579,7 +559,6 @@ class BusinessDiscovery:
             'technology': ['Microsoft', 'Google', 'Apple', 'Amazon', 'Meta'],
             'consulting': ['McKinsey', 'BCG', 'Deloitte', 'PwC', 'Accenture'],
         }
-        # Default fallback companies
         defaults = ['TechCorp', 'InnovateInc', 'SolutionsLLC', 'GlobalEnterprises', 'NextGen']
         return industry_companies.get(industry.lower(), defaults)[:limit]
     
@@ -599,7 +578,6 @@ class BusinessDiscovery:
                 print("❌ Apify authentication failed - check your token")
                 return []
             
-            # Search each industry
             for industry in campaign.ideal_industries[:3]:
                 companies = self._get_companies_for_industry(industry, limit=3)
                 print(f"🔍 Searching {industry} companies: {companies}")
