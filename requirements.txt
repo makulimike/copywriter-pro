@@ -20,4 +20,4 @@ urllib3==2.6.3
 Werkzeug==3.1.5
 lxml
 linkedin-api
-"apify-client==1.5.0" 
+apify-client==1.5.0 
