@@ -1,6 +1,6 @@
 """
 FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - SIMPLIFIED
-Discover businesses via Apify (LinkedIn Company Scraper + Google Maps) and send cold emails.
+Discover businesses via Apify (LinkedIn Company Employees + Google Maps) and send cold emails.
 No reply monitoring, no meeting scheduling.
 """
 
@@ -460,7 +460,7 @@ class Database:
 # ============================================================================
 
 class ApifyDiscovery:
-    """Lead discovery using various Apify actors (LinkedIn Company Scraper, Google Maps, etc.)"""
+    """Lead discovery using various Apify actors (LinkedIn Company Employees, Google Maps, etc.)"""
 
     def __init__(self, api_token=None):
         self.api_token = api_token
@@ -477,8 +477,8 @@ class ApifyDiscovery:
 
     def search_linkedin_people(self, company_name: str, job_titles: List[str] = None, max_results: int = 10) -> List[Dict]:
         """
-        Search for people at a specific company using dev_fusion's LinkedIn Company Scraper.
-        Actor: dev_fusion/Linkedin-Company-Scraper
+        Search for people at a specific company using curious_coder's LinkedIn Company Employees Scraper.
+        Actor: curious_coder/linkedin-company-employees-scraper
         """
         if not self.authenticated or not self.client:
             print("❌ Apify not configured")
@@ -488,17 +488,16 @@ class ApifyDiscovery:
         try:
             print(f"🔍 Apify: Searching for employees at {company_name}")
 
+            # The actor expects a company name
             run_input = {
-                "companyName": company_name,
+                "company": company_name,
                 "maxResults": max_results,
-                "getEmail": True,          # try to fetch emails
-                "getPhone": True,           # try to fetch phone numbers
             }
             if job_titles and len(job_titles) > 0:
-                run_input["jobTitles"] = job_titles
+                run_input["jobTitle"] = job_titles[0]  # Some actors support job title filter
 
-            print(f"🚀 Calling Apify actor: dev_fusion/Linkedin-Company-Scraper")
-            run = self.client.actor("dev_fusion/Linkedin-Company-Scraper").call(run_input=run_input)
+            print(f"🚀 Calling Apify actor: curious_coder/linkedin-company-employees-scraper")
+            run = self.client.actor("curious_coder/linkedin-company-employees-scraper").call(run_input=run_input)
 
             if run and run.get("defaultDatasetId"):
                 dataset = self.client.dataset(run["defaultDatasetId"])
@@ -508,12 +507,12 @@ class ApifyDiscovery:
                         'name': f"{item.get('firstName', '')} {item.get('lastName', '')}".strip(),
                         'company': company_name,
                         'job_title': item.get('jobTitle', ''),
-                        'linkedin_url': item.get('profileUrl', ''),
+                        'linkedin_url': item.get('profileUrl', item.get('url', '')),
                         'location': item.get('location', ''),
                         'country': self._extract_country(item.get('location', '')),
                         'email': item.get('email', ''),
                         'phone': item.get('phone', ''),
-                        'industry': '',
+                        'industry': item.get('industry', ''),
                         'source': LeadSource.APIFY_LINKEDIN.value
                     }
                     leads.append(lead)
@@ -548,7 +547,7 @@ class ApifyDiscovery:
                 "includeReviews": False,
             }
 
-            run = self.client.actor("apify/google-maps-scraper").call(run_input=run_input)
+            run = self.client.actor("compass/google-maps-scraper").call(run_input=run_input)
 
             if run and run.get("defaultDatasetId"):
                 dataset = self.client.dataset(run["defaultDatasetId"])
@@ -1239,7 +1238,7 @@ def main():
     print("="*60)
     print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM")
     print("="*60)
-    print("Powered by Apify (LinkedIn Company Scraper + Google Maps)")
+    print("Powered by Apify (LinkedIn Company Employees + Google Maps)")
     print("No other API keys needed - just your Apify token")
     print("Manual discovery only - click 'Find Real Businesses'")
     create_default_user()
