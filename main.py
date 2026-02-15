@@ -1572,6 +1572,19 @@ def analytics_dashboard():
 # MAIN
 # ----------------------------------------------------------------------------
 
+# ----------------------------------------------------------------------------
+# HEALTH CHECK (for Render)
+# ----------------------------------------------------------------------------
+
+@app.route('/health', methods=['GET', 'HEAD'])
+def health_check():
+    """Simple health check endpoint for Render."""
+    return '', 200
+
+# ----------------------------------------------------------------------------
+# MAIN
+# ----------------------------------------------------------------------------
+
 def create_default_user():
     if not db.get_user_by_username('admin'):
         admin = User(
@@ -1601,10 +1614,18 @@ def main():
     print("🔗 http://localhost:5000")
     print("👤 Login: admin / admin123")
     print("="*60)
-    Thread(target=open_browser).start()
-    app.run(debug=True, host='0.0.0.0', port=5000)
-
+    
+    # Only open browser locally, not on Render
+    if not os.environ.get('RENDER'):
+        Thread(target=open_browser).start()
 
 if __name__ == "__main__":
+    # Get port from environment variable (for Render) or use 5000 locally
     port = int(os.environ.get("PORT", 5000))
+    print(f"🚀 Starting Flask app on port {port}")
+    
+    # Small delay to ensure everything is loaded
+    time.sleep(1)
+    
+    # Run the app - this is the ONLY app.run() call
     app.run(host='0.0.0.0', port=port, debug=True)
