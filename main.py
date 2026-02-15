@@ -1,6 +1,7 @@
 """
 FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - SIMPLIFIED
-Discover businesses via LinkedIn (via Proxycurl) and send cold emails.
+Discover businesses via LinkedIn (via Apify), Google Places, Yelp, and Clearbit.
+Send cold emails with phone numbers and location targeting.
 No reply monitoring, no meeting scheduling.
 """
 
@@ -36,6 +37,14 @@ try:
 except ImportError:
     BS4_AVAILABLE = False
 
+# Apify
+try:
+    from apify_client import ApifyClient
+    APIFY_AVAILABLE = True
+except ImportError:
+    APIFY_AVAILABLE = False
+    print("⚠️ Apify client not installed. LinkedIn discovery will be disabled.")
+
 # Flask
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from flask_cors import CORS
@@ -65,7 +74,7 @@ class LeadSource(Enum):
     GOOGLE_PLACES = "google_places"
     CLEARBIT = "clearbit"
     YELP = "yelp"
-    PROXYCURL = "proxycurl"
+    APIFY = "apify_linkedin"
     SAMPLE = "sample"
 
 @dataclass
@@ -166,7 +175,7 @@ class User:
     linkedin_username: str = ""
     linkedin_password: str = ""
     linkedin_connected: bool = False
-    proxycurl_api_key: str = ""
+    apify_api_token: str = ""
 
     def __post_init__(self):
         if self.campaigns is None:
@@ -230,7 +239,7 @@ class Database:
         table_names = [t['name'] for t in tables]
 
         if 'users' in table_names:
-            for col in ['email_host', 'email_user', 'email_password', 'linkedin_username', 'linkedin_password', 'linkedin_connected', 'proxycurl_api_key']:
+            for col in ['email_host', 'email_user', 'email_password', 'linkedin_username', 'linkedin_password', 'linkedin_connected', 'apify_api_token']:
                 if not self.column_exists('users', col):
                     dtype = "INTEGER DEFAULT 0" if col == 'linkedin_connected' else "TEXT"
                     self.execute_query(f"ALTER TABLE users ADD COLUMN {col} {dtype}")
@@ -256,7 +265,7 @@ class Database:
                     linkedin_username TEXT,
                     linkedin_password TEXT,
                     linkedin_connected INTEGER DEFAULT 0,
-                    proxycurl_api_key TEXT,
+                    apify_api_token TEXT,
                     created_at TEXT NOT NULL
                 )
             ''')
@@ -332,12 +341,12 @@ class Database:
     def create_user(self, user: User):
         self.execute_insert('''
             INSERT INTO users (user_id, username, password_hash, email, email_host, email_user, email_password,
-                               linkedin_username, linkedin_password, linkedin_connected, proxycurl_api_key, created_at)
+                               linkedin_username, linkedin_password, linkedin_connected, apify_api_token, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (user.user_id, user.username, user.password_hash, user.email, user.email_host,
               user.email_user or '', user.email_password or '',
               user.linkedin_username or '', user.linkedin_password or '',
-              1 if user.linkedin_connected else 0, user.proxycurl_api_key or '', user.created_at))
+              1 if user.linkedin_connected else 0, user.apify_api_token or '', user.created_at))
 
     def get_user_by_username(self, username: str) -> Optional[User]:
         row = self.execute_query('SELECT * FROM users WHERE username = ?', (username,))
@@ -361,9 +370,9 @@ class Database:
         self.execute_update('UPDATE users SET linkedin_username = ?, linkedin_password = ?, linkedin_connected = 1 WHERE user_id = ?',
                             (linkedin_username, linkedin_password, user_id))
 
-    def update_user_proxycurl_key(self, user_id: str, api_key: str):
-        self.execute_update('UPDATE users SET proxycurl_api_key = ? WHERE user_id = ?',
-                            (api_key, user_id))
+    def update_user_apify_token(self, user_id: str, api_token: str):
+        self.execute_update('UPDATE users SET apify_api_token = ? WHERE user_id = ?',
+                            (api_token, user_id))
 
     # ------------------------------------------------------------------------
     # Campaign methods
@@ -521,111 +530,146 @@ class Database:
         return emails
 
 # ============================================================================
-# PROXYCURL DISCOVERY (Commercial LinkedIn API)
+# APIFY LINKEDIN DISCOVERY (Commercial LinkedIn API)
 # ============================================================================
 
-class ProxycurlDiscovery:
-    def __init__(self, api_key=None):
-        self.api_key = api_key
-        self.base_url = "https://nubela.co/proxycurl/api/v2"
-        self.authenticated = bool(api_key)
+class ApifyLinkedInDiscovery:
+    """LinkedIn data discovery using Apify's LinkedIn Profile Scraper"""
     
-    def set_api_key(self, api_key):
-        """Update the API key for this instance"""
-        self.api_key = api_key
-        self.authenticated = bool(api_key)
+    def __init__(self, api_token=None):
+        self.api_token = api_token
+        self.client = ApifyClient(api_token) if api_token and APIFY_AVAILABLE else None
+        self.authenticated = bool(api_token and APIFY_AVAILABLE and self.client)
+    
+    def set_api_token(self, api_token):
+        """Update the API token for this instance"""
+        self.api_token = api_token
+        self.client = ApifyClient(api_token) if api_token and APIFY_AVAILABLE else None
+        self.authenticated = bool(api_token and APIFY_AVAILABLE and self.client)
     
     def authenticate(self, username=None, password=None):
-        """Check if API key exists"""
-        return bool(self.api_key)
+        """Check if API token exists and client is available"""
+        return self.authenticated
     
-    def search_people(self, campaign: Campaign, max_results: int = 50) -> List[Dict]:
-        """Search for people using the user's API key"""
-        if not self.api_key:
-            print("❌ No Proxycurl API key configured for this user")
+    def search_people_by_company(self, company_name: str, job_titles: List[str] = None, max_results: int = 10) -> List[Dict]:
+        """
+        Search for people at a specific company using Apify's LinkedIn Company Employees scraper
+        """
+        if not self.authenticated or not self.client:
+            print("❌ Apify not configured or client unavailable")
             return []
         
         leads = []
-        headers = {'Authorization': f'Bearer {self.api_key}'}
-        
-        # For each job title and industry combination
-        for industry in campaign.ideal_industries[:2]:
-            for job_title in (campaign.ideal_job_titles or ['marketing manager'])[:2]:
-                # Note: Proxycurl doesn't have a direct search endpoint.
-                # In a real implementation, you would:
-                # 1. First get company URLs/names from another source (Google, Clearbit)
-                # 2. Then use Proxycurl's Company Employee API to get employees
-                # 3. Or use their Person Profile API with known LinkedIn URLs
-                
-                # This is a placeholder that returns sample data for demonstration
-                # In production, you would implement actual API calls
-                
-                # For now, we'll return a sample lead to show it works
-                sample_lead = {
-                    'name': f"Sample {job_title}",
-                    'company': f"Sample {industry} Company",
-                    'job_title': job_title,
-                    'linkedin_url': f"https://linkedin.com/in/sample-{industry}",
-                    'location': campaign.ideal_locations[0] if campaign.ideal_locations else "San Francisco",
-                    'country': campaign.ideal_countries[0] if campaign.ideal_countries else "United States",
-                    'industry': industry,
-                    'email': '',
-                    'source': LeadSource.PROXYCURL.value,
-                    'phone': '+1 (555) 123-4567'  # Sample phone
-                }
-                leads.append(sample_lead)
-                
-                # Add real implementation note in logs
-                print(f"🔍 Proxycurl: Would search for {job_title} in {industry} (API key present)")
-        
-        return leads
-    
-    def enrich_profile(self, linkedin_url: str) -> Dict:
-        """Get detailed profile data from a LinkedIn URL using user's API key"""
-        if not self.api_key:
-            return {}
-        
-        headers = {'Authorization': f'Bearer {self.api_key}'}
-        params = {
-            'linkedin_profile_url': linkedin_url,
-            'extra': 'include',
-            'use_cache': 'if-present'
-        }
-        
         try:
-            response = requests.get(
-                f"{self.base_url}/linkedin",
-                headers=headers,
-                params=params,
-                timeout=10
+            print(f"🔍 Apify: Searching for employees at {company_name}")
+            
+            # Use Apify's LinkedIn Company Employees scraper
+            # This actor gets employees from a LinkedIn company page
+            run_input = {
+                "company": company_name,
+                "maxResults": max_results,
+                "scrapeJobTitles": job_titles if job_titles else True,
+                "scrapeLocations": True,
+                "scrapeContactInfo": True,  # Tries to get emails/phones when available
+            }
+            
+            # Run the actor and wait for completion
+            run = self.client.actor("curious_coder~linkedin-company-employees-scraper").call(
+                run_input=run_input
             )
             
-            if response.status_code == 200:
-                data = response.json()
-                # Extract phone if available (Proxycurl sometimes includes it)
-                phone = data.get('phone_numbers', [{}])[0].get('number', '') if data.get('phone_numbers') else ''
-                
-                return {
-                    'name': f"{data.get('first_name', '')} {data.get('last_name', '')}".strip(),
-                    'company': data.get('experiences', [{}])[0].get('company', '') if data.get('experiences') else '',
-                    'job_title': data.get('experiences', [{}])[0].get('title', '') if data.get('experiences') else '',
-                    'email': '',  # Proxycurl doesn't provide email by default
-                    'linkedin_url': linkedin_url,
-                    'industry': data.get('industry', ''),
-                    'location': data.get('city', ''),
-                    'country': data.get('country', ''),
-                    'phone': phone,
-                    'source': LeadSource.PROXYCURL.value
-                }
-            elif response.status_code == 402:
-                print("❌ Proxycurl: Insufficient credits - user needs to top up")
-            elif response.status_code == 401:
-                print("❌ Proxycurl: Invalid API key")
-                
+            # Get results from the dataset
+            if run and run.get("defaultDatasetId"):
+                dataset = self.client.dataset(run["defaultDatasetId"])
+                for item in dataset.iterate_items():
+                    # Extract name
+                    first = item.get('firstName', '')
+                    last = item.get('lastName', '')
+                    name = f"{first} {last}".strip()
+                    if not name:
+                        name = item.get('name', '')
+                    
+                    lead = {
+                        'name': name,
+                        'company': company_name,
+                        'job_title': item.get('jobTitle', item.get('title', '')),
+                        'linkedin_url': item.get('profileUrl', item.get('url', '')),
+                        'location': item.get('location', ''),
+                        'country': self._extract_country(item.get('location', '')),
+                        'email': item.get('email', ''),
+                        'phone': item.get('phone', item.get('phoneNumber', '')),
+                        'industry': item.get('industry', ''),
+                        'source': LeadSource.APIFY.value
+                    }
+                    leads.append(lead)
+                    
+                    # Limit results
+                    if len(leads) >= max_results:
+                        break
+                        
+                print(f"✅ Apify: Found {len(leads)} employees at {company_name}")
+            else:
+                print(f"⚠️ Apify: No results for {company_name}")
+                    
         except Exception as e:
-            print(f"Proxycurl enrichment error: {e}")
+            print(f"❌ Apify search error: {e}")
+            
+        return leads
+    
+    def search_by_keywords(self, keywords: str, max_results: int = 20) -> List[Dict]:
+        """
+        Search LinkedIn profiles by keywords using Apify's LinkedIn Profile Scraper
+        """
+        if not self.authenticated or not self.client:
+            return []
         
-        return {}
+        leads = []
+        try:
+            print(f"🔍 Apify: Searching for '{keywords}'")
+            
+            # Use Apify's LinkedIn Profile Scraper with search
+            run_input = {
+                "searchUrl": f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(keywords)}",
+                "maxResults": max_results,
+            }
+            
+            run = self.client.actor("drobnikj~linkedin-people-scraper").call(
+                run_input=run_input
+            )
+            
+            if run and run.get("defaultDatasetId"):
+                dataset = self.client.dataset(run["defaultDatasetId"])
+                for item in dataset.iterate_items():
+                    lead = {
+                        'name': item.get('name', ''),
+                        'company': item.get('company', item.get('currentCompany', '')),
+                        'job_title': item.get('title', item.get('jobTitle', '')),
+                        'linkedin_url': item.get('url', item.get('profileUrl', '')),
+                        'location': item.get('location', ''),
+                        'country': self._extract_country(item.get('location', '')),
+                        'email': item.get('email', ''),
+                        'phone': item.get('phone', ''),
+                        'industry': item.get('industry', ''),
+                        'source': LeadSource.APIFY.value
+                    }
+                    leads.append(lead)
+                    
+                    if len(leads) >= max_results:
+                        break
+                        
+                print(f"✅ Apify: Found {len(leads)} profiles for '{keywords}'")
+                    
+        except Exception as e:
+            print(f"❌ Apify search error: {e}")
+            
+        return leads
+    
+    def _extract_country(self, location: str) -> str:
+        """Extract country from location string"""
+        if not location:
+            return ''
+        parts = location.split(',')
+        return parts[-1].strip() if len(parts) > 1 else ''
 
 # ============================================================================
 # EMAIL ENRICHMENT
@@ -699,21 +743,54 @@ class BusinessDiscovery:
         self.clearbit_api_key = os.getenv("CLEARBIT_API_KEY", "")
         self.yelp_api_key = os.getenv("YELP_API_KEY", "")
         self.email_enricher = EmailEnrichment()
-        # Proxycurl will be created per-user with their API key
+        # Apify will be created per-user with their API token
 
-    def discover_businesses(self, campaign: Campaign, user_proxycurl_key: str = None, max_businesses: int = 50) -> List[Dict]:
+    def _get_companies_for_industry(self, industry: str, limit: int = 5) -> List[str]:
+        """
+        Helper method to get sample company names for an industry
+        In production, you'd use Clearbit, Google, or a database
+        """
+        industry_companies = {
+            'saas': ['Salesforce', 'HubSpot', 'Zoom', 'Slack', 'Atlassian'],
+            'fintech': ['Stripe', 'Square', 'PayPal', 'Robinhood', 'Revolut'],
+            'e-commerce': ['Shopify', 'Amazon', 'eBay', 'Etsy', 'WooCommerce'],
+            'healthtech': ['Cerner', 'Epic', 'Teladoc', 'Flatiron', 'Oscar'],
+            'marketing': ['Mailchimp', 'Marketo', 'HubSpot', 'Salesforce', 'ActiveCampaign'],
+            'technology': ['Microsoft', 'Google', 'Apple', 'Amazon', 'Meta'],
+            'consulting': ['McKinsey', 'BCG', 'Deloitte', 'PwC', 'Accenture'],
+        }
+        
+        # Default fallback
+        defaults = ['TechCorp', 'InnovateInc', 'SolutionsLLC', 'GlobalEnterprises', 'NextGen']
+        
+        companies = industry_companies.get(industry.lower(), defaults)
+        return companies[:limit]
+
+    def discover_businesses(self, campaign: Campaign, user_apify_token: str = None, max_businesses: int = 50) -> List[Dict]:
         all_businesses = []
         if not campaign.ideal_industries:
             return []
 
-        # Proxycurl (if user has API key)
-        if user_proxycurl_key:
+        # Apify (if user has API token)
+        if user_apify_token and APIFY_AVAILABLE:
             try:
-                proxycurl = ProxycurlDiscovery(user_proxycurl_key)
-                proxycurl_leads = proxycurl.search_people(campaign, max_businesses // 3)
-                all_businesses.extend(proxycurl_leads)
+                apify = ApifyLinkedInDiscovery(user_apify_token)
+                if apify.authenticate():
+                    # For each industry, get some companies and search for employees
+                    for industry in campaign.ideal_industries[:2]:
+                        companies = self._get_companies_for_industry(industry, limit=3)
+                        for company in companies:
+                            leads = apify.search_people_by_company(
+                                company,
+                                job_titles=campaign.ideal_job_titles,
+                                max_results=max_businesses // 6
+                            )
+                            all_businesses.extend(leads)
+                            
+                            # Add a small delay to avoid rate limits
+                            time.sleep(1)
             except Exception as e:
-                print(f"Proxycurl error: {e}")
+                print(f"Apify error: {e}")
 
         # Google Places (with phone numbers)
         if self.google_api_key:
@@ -1123,7 +1200,7 @@ def logout():
     return redirect(url_for('index'))
 
 # ----------------------------------------------------------------------------
-# LINKEDIN SETTINGS (Now for Proxycurl API key)
+# APIFY LINKEDIN SETTINGS
 # ----------------------------------------------------------------------------
 
 @app.route('/settings/linkedin', methods=['GET', 'POST'])
@@ -1138,20 +1215,23 @@ def linkedin_settings():
         return redirect(url_for('index'))
     
     if request.method == 'POST':
-        # Save Proxycurl API key
-        proxycurl_key = request.form.get('proxycurl_api_key', '').strip()
+        # Save Apify API token
+        apify_token = request.form.get('apify_api_token', '').strip()
         
-        if proxycurl_key:
-            db.update_user_proxycurl_key(user.user_id, proxycurl_key)
+        if apify_token:
+            db.update_user_apify_token(user.user_id, apify_token)
             
-            # Test the key (optional)
-            test_discovery = ProxycurlDiscovery(proxycurl_key)
-            if test_discovery.authenticate():
-                flash('Proxycurl API key saved and verified!', 'success')
+            # Test the token
+            if APIFY_AVAILABLE:
+                test_discovery = ApifyLinkedInDiscovery(apify_token)
+                if test_discovery.authenticate():
+                    flash('Apify API token saved and verified! You can now search LinkedIn.', 'success')
+                else:
+                    flash('Token saved but verification failed. Please check your token.', 'warning')
             else:
-                flash('API key saved but verification failed. Please check your key.', 'warning')
+                flash('Token saved. Note: Apify client not installed on server.', 'info')
         else:
-            flash('Please enter a valid API key', 'error')
+            flash('Please enter a valid API token', 'error')
         
         return redirect(url_for('dashboard'))
     
@@ -1227,15 +1307,15 @@ def new_campaign():
         )
         db.save_campaign(session['user_id'], campaign)
 
-        # Capture user_id and proxycurl key for background thread
+        # Capture user_id and apify token for background thread
         uid = session['user_id']
         cid = campaign.campaign_id
         user = db.get_user(uid)
-        proxycurl_key = user.proxycurl_api_key if user else None
+        apify_token = user.apify_api_token if user else None
 
-        def discover(uid, cid, campaign, proxycurl_key):
+        def discover(uid, cid, campaign, apify_token):
             time.sleep(2)
-            discovered = business_discovery.discover_businesses(campaign, user_proxycurl_key=proxycurl_key, max_businesses=25)
+            discovered = business_discovery.discover_businesses(campaign, user_apify_token=apify_token, max_businesses=25)
             leads = []
             for i, biz in enumerate(discovered):
                 lead = Lead(
@@ -1263,7 +1343,7 @@ def new_campaign():
             db.save_leads(uid, cid, leads)
             print(f"✅ Discovered {len(leads)} leads for {campaign.name}")
 
-        Thread(target=discover, args=(uid, cid, campaign, proxycurl_key)).start()
+        Thread(target=discover, args=(uid, cid, campaign, apify_token)).start()
         flash('Campaign created! Leads are being discovered in background.', 'success')
         return redirect(url_for('campaign_detail', campaign_id=campaign.campaign_id))
 
@@ -1386,10 +1466,10 @@ def discover_more(campaign_id):
     uid = session['user_id']
     cid = campaign_id
     user = db.get_user(uid)
-    proxycurl_key = user.proxycurl_api_key if user else None
+    apify_token = user.apify_api_token if user else None
 
-    def discover(uid, cid, campaign, proxycurl_key):
-        discovered = business_discovery.discover_businesses(campaign, user_proxycurl_key=proxycurl_key, max_businesses=25)
+    def discover(uid, cid, campaign, apify_token):
+        discovered = business_discovery.discover_businesses(campaign, user_apify_token=apify_token, max_businesses=25)
         leads = []
         for i, biz in enumerate(discovered):
             lead = Lead(
@@ -1417,7 +1497,7 @@ def discover_more(campaign_id):
         db.save_leads(uid, cid, leads)
         print(f"✅ Added {len(leads)} more leads")
 
-    Thread(target=discover, args=(uid, cid, campaign, proxycurl_key)).start()
+    Thread(target=discover, args=(uid, cid, campaign, apify_token)).start()
     return redirect(url_for('campaign_detail', campaign_id=campaign_id))
 
 # ----------------------------------------------------------------------------
@@ -1511,8 +1591,9 @@ def main():
     print("="*60)
     print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM (Simplified)")
     print("="*60)
-    print("Discover businesses via Google, Yelp, Clearbit, and LinkedIn (via Proxycurl)")
+    print("Discover businesses via Google, Yelp, Clearbit, and LinkedIn (via Apify)")
     print("Phone numbers are automatically extracted when available.")
+    print("Location targeting based on campaign settings.")
     print("No reply monitoring, no meeting scheduling.")
     create_default_user()
     print("\n✅ System ready!")
@@ -1522,5 +1603,7 @@ def main():
     Thread(target=open_browser).start()
     app.run(debug=True, host='0.0.0.0', port=5000)
 
+
 if __name__ == "__main__":
-    main()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
