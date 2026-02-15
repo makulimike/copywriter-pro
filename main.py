@@ -1,7 +1,6 @@
 """
 FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - SIMPLIFIED
-Discover businesses via LinkedIn (via Apify only).
-Send cold emails with phone numbers and location targeting.
+Discover businesses via Apify (LinkedIn, Google Maps) and send cold emails.
 No reply monitoring, no meeting scheduling.
 """
 
@@ -35,7 +34,7 @@ try:
     APIFY_AVAILABLE = True
 except ImportError:
     APIFY_AVAILABLE = False
-    print("⚠️ Apify client not installed. LinkedIn discovery will be disabled.")
+    print("⚠️ Apify client not installed. Discovery will be disabled.")
 
 # Flask
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
@@ -61,7 +60,8 @@ class EmailStatus(Enum):
 class LeadSource(Enum):
     MANUAL = "manual"
     CSV = "csv"
-    APIFY = "apify_linkedin"
+    APIFY_LINKEDIN = "apify_linkedin"
+    APIFY_GOOGLE_MAPS = "apify_google_maps"
 
 @dataclass
 class Lead:
@@ -456,84 +456,133 @@ class Database:
         return emails
 
 # ============================================================================
-# APIFY LINKEDIN DISCOVERY (WORKING ACTOR)
+# APIFY DISCOVERY (Multiple Sources)
 # ============================================================================
 
-class ApifyLinkedInDiscovery:
-    """LinkedIn data discovery using Apify's LinkedIn People Scraper (drobnikj~linkedin-people-scraper)"""
-    
+class ApifyDiscovery:
+    """Lead discovery using various Apify actors (LinkedIn, Google Maps, etc.)"""
+
     def __init__(self, api_token=None):
         self.api_token = api_token
         self.client = ApifyClient(api_token) if api_token and APIFY_AVAILABLE else None
         self.authenticated = bool(api_token and APIFY_AVAILABLE and self.client)
-    
+
     def set_api_token(self, api_token):
         self.api_token = api_token
         self.client = ApifyClient(api_token) if api_token and APIFY_AVAILABLE else None
         self.authenticated = bool(api_token and APIFY_AVAILABLE and self.client)
-    
+
     def authenticate(self):
         return self.authenticated
-    
-    def search_people_by_company(self, company_name: str, job_titles: List[str] = None, max_results: int = 10) -> List[Dict]:
-        """
-        Search for people at a specific company using Apify's LinkedIn People Scraper.
-        Uses the reliable actor 'drobnikj~linkedin-people-scraper'.
-        """
+
+    def search_linkedin_people(self, company_name: str, job_titles: List[str] = None, max_results: int = 10) -> List[Dict]:
+        """Search LinkedIn for people at a company using Apify's official LinkedIn Profile Scraper."""
         if not self.authenticated or not self.client:
-            print("❌ Apify not configured or client unavailable")
+            print("❌ Apify not configured")
             return []
-        
+
         leads = []
         try:
-            print(f"🔍 Apify: Searching for employees at {company_name}")
-            
-            # Build search query: LinkedIn profiles mentioning the company
+            print(f"🔍 Apify: Searching LinkedIn for employees at {company_name}")
+
             query = f"site:linkedin.com/in/ \"{company_name}\""
             if job_titles and len(job_titles) > 0:
                 query += f" \"{job_titles[0]}\""
-            
+
+            encoded_query = quote_plus(query)
+            search_url = f"https://www.linkedin.com/search/results/people/?keywords={encoded_query}"
+
             run_input = {
-                "searchUrl": f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(query)}",
+                "searchUrl": search_url,
                 "maxResults": max_results,
             }
-            
-            print(f"🚀 Calling Apify actor: drobnikj~linkedin-people-scraper with query: {query}")
-            run = self.client.actor("drobnikj~linkedin-people-scraper").call(
-                run_input=run_input
-            )
-            
+
+            print(f"🚀 Calling Apify actor: apify~linkedin-profile-scraper")
+            run = self.client.actor("apify~linkedin-profile-scraper").call(run_input=run_input)
+
             if run and run.get("defaultDatasetId"):
                 dataset = self.client.dataset(run["defaultDatasetId"])
                 count = 0
                 for item in dataset.iterate_items():
+                    name = item.get('fullName', '') or f"{item.get('firstName', '')} {item.get('lastName', '')}".strip()
                     lead = {
-                        'name': item.get('name', ''),
+                        'name': name,
                         'company': company_name,
-                        'job_title': item.get('title', item.get('jobTitle', '')),
-                        'linkedin_url': item.get('url', item.get('profileUrl', '')),
+                        'job_title': item.get('headline', ''),
+                        'linkedin_url': item.get('profileUrl', ''),
                         'location': item.get('location', ''),
                         'country': self._extract_country(item.get('location', '')),
-                        'email': item.get('email', ''),
-                        'phone': item.get('phone', ''),
+                        'email': '',
+                        'phone': '',
                         'industry': item.get('industry', ''),
-                        'source': LeadSource.APIFY.value
+                        'source': LeadSource.APIFY_LINKEDIN.value
                     }
                     leads.append(lead)
                     count += 1
                     if count >= max_results:
                         break
-                print(f"✅ Apify: Found {len(leads)} employees at {company_name}")
+                print(f"✅ Apify: Found {len(leads)} employees on LinkedIn")
             else:
-                print(f"⚠️ Apify: No results for {company_name}")
-                    
+                print(f"⚠️ Apify: No LinkedIn results for {company_name}")
+
         except Exception as e:
-            print(f"❌ Apify search error: {e}")
+            print(f"❌ Apify LinkedIn error: {e}")
             import traceback
             traceback.print_exc()
-            
+
         return leads
-    
+
+    def search_google_maps(self, search_term: str, location: str = "", max_results: int = 20) -> List[Dict]:
+        """Search for businesses on Google Maps using Apify's Google Maps Scraper."""
+        if not self.authenticated or not self.client:
+            print("❌ Apify not configured")
+            return []
+
+        leads = []
+        try:
+            print(f"🔍 Apify: Searching Google Maps for '{search_term}' in '{location or 'any'}'")
+
+            run_input = {
+                "search": search_term,
+                "location": location if location else "United States",
+                "maxResults": max_results,
+                "includeReviews": False,
+            }
+
+            run = self.client.actor("apify~google-maps-scraper").call(run_input=run_input)
+
+            if run and run.get("defaultDatasetId"):
+                dataset = self.client.dataset(run["defaultDatasetId"])
+                count = 0
+                for item in dataset.iterate_items():
+                    lead = {
+                        'name': item.get('title', ''),
+                        'company': item.get('title', ''),
+                        'job_title': '',
+                        'linkedin_url': '',
+                        'location': item.get('address', ''),
+                        'country': item.get('country', ''),
+                        'email': '',
+                        'phone': item.get('phone', ''),
+                        'website': item.get('website', ''),
+                        'industry': search_term,  # Use search term as industry
+                        'source': LeadSource.APIFY_GOOGLE_MAPS.value
+                    }
+                    leads.append(lead)
+                    count += 1
+                    if count >= max_results:
+                        break
+                print(f"✅ Apify: Found {len(leads)} businesses on Google Maps")
+            else:
+                print("⚠️ Apify: No Google Maps results")
+
+        except Exception as e:
+            print(f"❌ Apify Google Maps error: {e}")
+            import traceback
+            traceback.print_exc()
+
+        return leads
+
     def _extract_country(self, location: str) -> str:
         if not location:
             return ''
@@ -541,15 +590,28 @@ class ApifyLinkedInDiscovery:
         return parts[-1].strip() if len(parts) > 1 else ''
 
 # ============================================================================
-# BUSINESS DISCOVERY (Apify Only)
+# BUSINESS DISCOVERY (Combines multiple Apify sources)
 # ============================================================================
 
 class BusinessDiscovery:
     def __init__(self):
-        pass  # No API keys needed except Apify token per user
-    
+        pass  # Apify client will be created per user with their token
+
+    def _get_search_terms_for_industry(self, industry: str) -> List[str]:
+        """Generate search terms for an industry (used in Google Maps)."""
+        base_terms = [industry]
+        if industry.lower() == 'saas':
+            base_terms.extend(['software company', 'cloud software', 'saas company'])
+        elif industry.lower() == 'fintech':
+            base_terms.extend(['financial technology', 'finance company', 'banking software'])
+        elif industry.lower() == 'e-commerce':
+            base_terms.extend(['online store', 'ecommerce', 'retail website'])
+        elif industry.lower() == 'marketing':
+            base_terms.extend(['marketing agency', 'digital marketing', 'advertising firm'])
+        return base_terms[:2]  # Limit to avoid too many queries
+
     def _get_companies_for_industry(self, industry: str, limit: int = 5) -> List[str]:
-        """Get a list of well-known companies for a given industry."""
+        """Get sample company names for LinkedIn search."""
         industry_companies = {
             'saas': ['Salesforce', 'HubSpot', 'Zoom', 'Slack', 'Atlassian'],
             'fintech': ['Stripe', 'Square', 'PayPal', 'Robinhood', 'Revolut'],
@@ -561,48 +623,70 @@ class BusinessDiscovery:
         }
         defaults = ['TechCorp', 'InnovateInc', 'SolutionsLLC', 'GlobalEnterprises', 'NextGen']
         return industry_companies.get(industry.lower(), defaults)[:limit]
-    
+
     def discover_businesses(self, campaign: Campaign, user_apify_token: str = None, max_businesses: int = 50) -> List[Dict]:
         if not campaign.ideal_industries:
             return []
-        
+
         if not user_apify_token or not APIFY_AVAILABLE:
-            print("❌ Apify token missing or client not available - no leads can be found")
+            print("❌ Apify token missing or client not available")
             return []
-        
+
         all_businesses = []
-        
+
         try:
-            apify = ApifyLinkedInDiscovery(user_apify_token)
+            apify = ApifyDiscovery(user_apify_token)
             if not apify.authenticate():
-                print("❌ Apify authentication failed - check your token")
+                print("❌ Apify authentication failed")
                 return []
-            
-            for industry in campaign.ideal_industries[:3]:
+
+            # --- LinkedIn Search ---
+            for industry in campaign.ideal_industries[:2]:
                 companies = self._get_companies_for_industry(industry, limit=3)
-                print(f"🔍 Searching {industry} companies: {companies}")
-                
+                print(f"🔍 LinkedIn: Searching {industry} companies: {companies}")
                 for company in companies:
-                    leads = apify.search_people_by_company(
+                    leads = apify.search_linkedin_people(
                         company,
                         job_titles=campaign.ideal_job_titles,
                         max_results=max_businesses // 6
                     )
                     all_businesses.extend(leads)
-                    time.sleep(1)  # Avoid rate limits
-                    
+                    time.sleep(1)  # Rate limit avoidance
+
+            # --- Google Maps Search ---
+            for industry in campaign.ideal_industries[:2]:
+                search_terms = self._get_search_terms_for_industry(industry)
+                locations = campaign.ideal_locations if campaign.ideal_locations else ['']
+                for term in search_terms:
+                    for loc in locations[:2]:
+                        if not loc and not campaign.search_globally:
+                            continue
+                        if not loc:
+                            loc = "United States"
+                        leads = apify.search_google_maps(
+                            search_term=term,
+                            location=loc,
+                            max_results=max_businesses // 6
+                        )
+                        all_businesses.extend(leads)
+                        time.sleep(1)
+
+            # --- Additional sources can be added here ---
+
         except Exception as e:
             print(f"❌ Discovery error: {e}")
-        
-        # Deduplicate
+            import traceback
+            traceback.print_exc()
+
+        # Deduplicate by (name, company)
         seen = set()
         unique = []
         for b in all_businesses:
-            key = f"{b.get('name')}_{b.get('company')}_{b.get('linkedin_url', '')}"
+            key = f"{b.get('name')}_{b.get('company')}"
             if key not in seen:
                 seen.add(key)
                 unique.append(b)
-        
+
         print(f"✅ Total unique leads found: {len(unique)}")
         return unique[:max_businesses]
 
@@ -731,7 +815,7 @@ class AnalyticsEngine:
         if not campaign:
             return {}
         leads = db.get_campaign_leads(user_id, campaign_id)
-        
+
         total = len(leads)
         sent = len([l for l in leads if l.email_status == EmailStatus.SENT.value])
         hot = len([l for l in leads if l.status == LeadStatus.QUALIFIED_HOT.value])
@@ -827,21 +911,21 @@ def logout():
 def apify_settings():
     if 'user_id' not in session:
         return redirect(url_for('index'))
-    
+
     user = db.get_user(session['user_id'])
     if not user:
         session.clear()
         flash('User not found. Please log in again.', 'error')
         return redirect(url_for('index'))
-    
+
     if request.method == 'POST':
         apify_token = request.form.get('apify_api_token', '').strip()
-        
+
         if apify_token:
             db.update_user_apify_token(user.user_id, apify_token)
-            
+
             if APIFY_AVAILABLE:
-                test_discovery = ApifyLinkedInDiscovery(apify_token)
+                test_discovery = ApifyDiscovery(apify_token)
                 if test_discovery.authenticate():
                     flash('Apify API token saved and verified!', 'success')
                 else:
@@ -850,9 +934,9 @@ def apify_settings():
                 flash('Token saved. Note: Apify client not installed on server.', 'info')
         else:
             flash('Please enter a valid API token', 'error')
-        
+
         return redirect(url_for('dashboard'))
-    
+
     return render_template('apify_settings.html', user=user)
 
 # ----------------------------------------------------------------------------
@@ -925,7 +1009,6 @@ def new_campaign():
         )
         db.save_campaign(session['user_id'], campaign)
 
-        # No automatic discovery - user must click button
         flash('Campaign created! Click "Find Real Businesses" to start discovering leads.', 'success')
         return redirect(url_for('campaign_detail', campaign_id=campaign.campaign_id))
 
@@ -1012,7 +1095,7 @@ def discover_businesses(campaign_id):
     if not campaign:
         flash('Campaign not found', 'error')
         return redirect(url_for('dashboard'))
-    
+
     flash('Starting discovery with Apify...', 'success')
 
     uid = session['user_id']
@@ -1042,7 +1125,7 @@ def discover_businesses(campaign_id):
                 job_title=biz.get('job_title', ''),
                 linkedin_url=biz.get('linkedin_url', ''),
                 linkedin_profile=biz.get('linkedin_profile'),
-                source=biz.get('source', LeadSource.APIFY.value),
+                source=biz.get('source', LeadSource.APIFY_LINKEDIN.value),
                 status=LeadStatus.PENDING.value,
                 qualification_score=50,
                 phone=biz.get('phone', ''),
@@ -1124,7 +1207,7 @@ def analytics_dashboard():
     total_emails = sum(s.get('emails_sent',0) for s in all_stats)
     total_with_phone = sum(s.get('leads_with_phone',0) for s in all_stats)
     return render_template('analytics.html', stats=all_stats, total_hot=total_hot,
-                           total_leads=total_leads, total_emails=total_emails, 
+                           total_leads=total_leads, total_emails=total_emails,
                            total_with_phone=total_with_phone, total_campaigns=len(campaigns))
 
 # ----------------------------------------------------------------------------
@@ -1159,7 +1242,7 @@ def main():
     print("="*60)
     print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM")
     print("="*60)
-    print("Powered by Apify LinkedIn Scraper")
+    print("Powered by Apify (LinkedIn + Google Maps)")
     print("No other API keys needed - just your Apify token")
     print("Manual discovery only - click 'Find Real Businesses'")
     create_default_user()
@@ -1167,7 +1250,7 @@ def main():
     print("🔗 http://localhost:5000")
     print("👤 Login: admin / admin123")
     print("="*60)
-    
+
     if not os.environ.get('RENDER'):
         Thread(target=open_browser).start()
 
