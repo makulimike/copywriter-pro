@@ -553,7 +553,7 @@ class ApifyLinkedInDiscovery:
     
     def search_people_by_company(self, company_name: str, job_titles: List[str] = None, max_results: int = 10) -> List[Dict]:
         """
-        Search for people at a specific company using Apify's LinkedIn Company Employees scraper
+        Search for people at a specific company using Apify's LinkedIn Profile Scraper
         """
         if not self.authenticated or not self.client:
             print("❌ Apify not configured or client unavailable")
@@ -563,18 +563,19 @@ class ApifyLinkedInDiscovery:
         try:
             print(f"🔍 Apify: Searching for employees at {company_name}")
             
-            # Use Apify's LinkedIn Company Employees scraper
-            # This actor gets employees from a LinkedIn company page
+            # Use a working Apify actor - LinkedIn Profile Scraper by drobnikj
+            # This is a reliable actor that can search by company
+            search_query = company_name
+            if job_titles and len(job_titles) > 0:
+                search_query = f"{company_name} {job_titles[0]}"
+            
             run_input = {
-                "company": company_name,
+                "searchUrl": f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(search_query)}",
                 "maxResults": max_results,
-                "scrapeJobTitles": job_titles if job_titles else True,
-                "scrapeLocations": True,
-                "scrapeContactInfo": True,  # Tries to get emails/phones when available
             }
             
             # Run the actor and wait for completion
-            run = self.client.actor("curious_coder~linkedin-company-employees-scraper").call(
+            run = self.client.actor("drobnikj~linkedin-people-scraper").call(
                 run_input=run_input
             )
             
@@ -583,21 +584,29 @@ class ApifyLinkedInDiscovery:
                 dataset = self.client.dataset(run["defaultDatasetId"])
                 for item in dataset.iterate_items():
                     # Extract name
-                    first = item.get('firstName', '')
-                    last = item.get('lastName', '')
-                    name = f"{first} {last}".strip()
-                    if not name:
-                        name = item.get('name', '')
+                    name = item.get('name', '')
+                    
+                    # Get current company from experience
+                    current_company = company_name
+                    job_title = ''
+                    
+                    # Try to extract current role from experiences
+                    experiences = item.get('experiences', [])
+                    for exp in experiences:
+                        if exp.get('company', '').lower() in company_name.lower() or company_name.lower() in exp.get('company', '').lower():
+                            job_title = exp.get('title', '')
+                            current_company = exp.get('company', company_name)
+                            break
                     
                     lead = {
                         'name': name,
-                        'company': company_name,
-                        'job_title': item.get('jobTitle', item.get('title', '')),
-                        'linkedin_url': item.get('profileUrl', item.get('url', '')),
+                        'company': current_company,
+                        'job_title': job_title,
+                        'linkedin_url': item.get('url', item.get('profileUrl', '')),
                         'location': item.get('location', ''),
                         'country': self._extract_country(item.get('location', '')),
                         'email': item.get('email', ''),
-                        'phone': item.get('phone', item.get('phoneNumber', '')),
+                        'phone': item.get('phone', ''),
                         'industry': item.get('industry', ''),
                         'source': LeadSource.APIFY.value
                     }
@@ -734,7 +743,7 @@ class EmailEnrichment:
         return ""
 
 # ============================================================================
-# BUSINESS DISCOVERY (Enhanced with all sources)
+# BUSINESS DISCOVERY (Enhanced with all sources - NO SAMPLES)
 # ============================================================================
 
 class BusinessDiscovery:
@@ -771,55 +780,72 @@ class BusinessDiscovery:
         if not campaign.ideal_industries:
             return []
 
+        print(f"🔍 Starting discovery with Apify token: {'Present' if user_apify_token else 'Missing'}")
+        print(f"🔍 Google API Key: {'Present' if self.google_api_key else 'Missing'}")
+        print(f"🔍 Yelp API Key: {'Present' if self.yelp_api_key else 'Missing'}")
+        print(f"🔍 Clearbit API Key: {'Present' if self.clearbit_api_key else 'Missing'}")
+
         # Apify (if user has API token)
         if user_apify_token and APIFY_AVAILABLE:
             try:
                 apify = ApifyLinkedInDiscovery(user_apify_token)
                 if apify.authenticate():
+                    print("✅ Apify authenticated successfully")
                     # For each industry, get some companies and search for employees
                     for industry in campaign.ideal_industries[:2]:
                         companies = self._get_companies_for_industry(industry, limit=3)
+                        print(f"🔍 Searching {industry} companies: {companies}")
                         for company in companies:
+                            print(f"🔍 Calling Apify for {company}")
                             leads = apify.search_people_by_company(
                                 company,
                                 job_titles=campaign.ideal_job_titles,
                                 max_results=max_businesses // 6
                             )
+                            print(f"✅ Apify returned {len(leads)} leads for {company}")
                             all_businesses.extend(leads)
                             
                             # Add a small delay to avoid rate limits
                             time.sleep(1)
+                else:
+                    print("❌ Apify authentication failed - check your token")
             except Exception as e:
-                print(f"Apify error: {e}")
+                print(f"❌ Apify error: {e}")
+        else:
+            print(f"❌ Apify not available - token: {bool(user_apify_token)}, APIFY_AVAILABLE: {APIFY_AVAILABLE}")
 
         # Google Places (with phone numbers)
         if self.google_api_key:
             try:
+                print("🔍 Searching Google Places...")
                 businesses = self._search_google_places(campaign, max_businesses // 3)
+                print(f"✅ Google Places returned {len(businesses)} businesses")
                 all_businesses.extend(businesses)
             except Exception as e:
-                print(f"Google Places error: {e}")
+                print(f"❌ Google Places error: {e}")
 
         # Clearbit (with phone numbers)
         if self.clearbit_api_key:
             try:
+                print("🔍 Searching Clearbit...")
                 businesses = self._search_clearbit(campaign, max_businesses // 3)
+                print(f"✅ Clearbit returned {len(businesses)} businesses")
                 all_businesses.extend(businesses)
             except Exception as e:
-                print(f"Clearbit error: {e}")
+                print(f"❌ Clearbit error: {e}")
 
         # Yelp (already has phone numbers)
         if self.yelp_api_key:
             try:
+                print("🔍 Searching Yelp...")
                 businesses = self._search_yelp(campaign, max_businesses // 3)
+                print(f"✅ Yelp returned {len(businesses)} businesses")
                 all_businesses.extend(businesses)
             except Exception as e:
-                print(f"Yelp error: {e}")
+                print(f"❌ Yelp error: {e}")
 
-        # Fallback samples
-        if not all_businesses:
-            businesses = self._generate_samples(campaign, max_businesses)
-            all_businesses.extend(businesses)
+        # NO SAMPLE DATA - only return real results
+        print(f"✅ Total real businesses found: {len(all_businesses)}")
 
         # Deduplicate
         seen = set()
@@ -943,36 +969,6 @@ class BusinessDiscovery:
                 except:
                     continue
         return businesses
-
-    def _generate_samples(self, campaign: Campaign, count: int) -> List[Dict]:
-        industries = campaign.ideal_industries or ['Technology', 'Marketing']
-        cities = campaign.ideal_locations or ['San Francisco', 'New York', 'London']
-        countries = campaign.ideal_countries or ['United States', 'United Kingdom']
-        job_titles = campaign.ideal_job_titles or ['Marketing Manager', 'CEO']
-        first_names = ['James', 'Mary', 'John', 'Patricia', 'Robert', 'Jennifer']
-        last_names = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia']
-
-        samples = []
-        for i in range(count):
-            ind = random.choice(industries)
-            city = random.choice(cities) if cities else 'San Francisco'
-            country = random.choice(countries) if countries else 'United States'
-            first = random.choice(first_names)
-            last = random.choice(last_names)
-            company = f"{random.choice(['Tech', 'Smart', 'Cloud', 'Digital', 'Innovate'])}{random.choice(['Labs', 'Solutions', 'Group', 'Inc'])}"
-            samples.append({
-                'name': f"{first} {last}",
-                'company': company,
-                'job_title': random.choice(job_titles),
-                'website': f"https://{company.lower()}.com",
-                'email': f"{first.lower()}.{last.lower()}@{company.lower()}.com",
-                'phone': f"+1 (555) {random.randint(100,999)}-{random.randint(1000,9999)}",
-                'industry': ind,
-                'location': city,
-                'country': country,
-                'source': LeadSource.SAMPLE.value
-            })
-        return samples
 
     def _extract_domain(self, website: str) -> str:
         if not website:
@@ -1335,7 +1331,7 @@ def new_campaign():
                     linkedin_profile=biz.get('linkedin_profile'),
                     source=biz.get('source', LeadSource.SAMPLE.value),
                     status=LeadStatus.PENDING.value,
-                    qualification_score=50,  # We'll calculate properly when the lead is fully created
+                    qualification_score=50,
                     phone=biz.get('phone', ''),
                     created_at=datetime.datetime.now().isoformat(),
                     updated_at=datetime.datetime.now().isoformat()
@@ -1425,7 +1421,7 @@ def send_emails(campaign_id):
     return redirect(url_for('campaign_detail', campaign_id=campaign_id))
 
 # ----------------------------------------------------------------------------
-# ADDITIONAL ROUTES TO FIX 404 ERRORS
+# ADDITIONAL ROUTES
 # ----------------------------------------------------------------------------
 
 @app.route('/campaign/<campaign_id>/discover-businesses', methods=['POST'])
@@ -1456,6 +1452,7 @@ def email_progress(campaign_id):
 
 @app.route('/campaign/<campaign_id>/discover-more', methods=['POST'])
 def discover_more(campaign_id):
+    """Manually trigger lead discovery (when user clicks button)."""
     if 'user_id' not in session:
         return redirect(url_for('index'))
     campaign = db.get_campaign(campaign_id)
@@ -1569,10 +1566,6 @@ def analytics_dashboard():
                            total_with_phone=total_with_phone, total_campaigns=len(campaigns))
 
 # ----------------------------------------------------------------------------
-# MAIN
-# ----------------------------------------------------------------------------
-
-# ----------------------------------------------------------------------------
 # HEALTH CHECK (for Render)
 # ----------------------------------------------------------------------------
 
@@ -1609,6 +1602,7 @@ def main():
     print("Phone numbers are automatically extracted when available.")
     print("Location targeting based on campaign settings.")
     print("No reply monitoring, no meeting scheduling.")
+    print("NO SAMPLE DATA - only real business results")
     create_default_user()
     print("\n✅ System ready!")
     print("🔗 http://localhost:5000")
