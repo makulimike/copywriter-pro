@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}LinkedIn API Settings{% endblock %}
+{% block title %}Apify Settings{% endblock %}
 {% block content %}
 <div class="px-4 sm:px-0">
-    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">LinkedIn Data Settings</h1>
+    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">Apify API Settings</h1>
 
     <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden mb-6">
         <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
             <h3 class="text-lg font-medium text-gray-900">Connect with Apify</h3>
-            <p class="mt-1 text-sm text-gray-500">Enter your Apify API token to enable LinkedIn data discovery. You manage your own billing directly with Apify.</p>
+            <p class="mt-1 text-sm text-gray-500">Enter your Apify API token to enable LinkedIn lead discovery. Apify is the only data source for finding real businesses.</p>
         </div>
         <div class="px-6 py-5">
-            <form action="/settings/linkedin" method="POST" class="space-y-6">
+            <form action="/settings/apify" method="POST" class="space-y-6">
                 <div>
                     <label for="apify_api_token" class="block text-sm font-medium text-gray-700">Your Apify API Token</label>
                     <input type="text" name="apify_api_token" id="apify_api_token" 
@@ -32,19 +32,17 @@
                         </div>
                         <div class="ml-3">
                             <p class="text-sm text-blue-700">
-                                <strong>How it works:</strong> Apify provides reliable LinkedIn scrapers that work without your personal LinkedIn account. 
-                                You get 100+ free credits to start, then pay as you go (≈$0.01 per profile). You control your spending directly with Apify.
+                                <strong>How it works:</strong> Apify provides reliable LinkedIn scrapers. You get 100+ free credits to start, then pay as you go (≈$0.01 per profile). You control your spending directly with Apify.
                             </p>
                         </div>
                     </div>
                 </div>
 
-                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <div class="bg-green-50 border-l-4 border-green-400 p-4">
                     <div class="flex">
                         <div class="ml-3">
-                            <p class="text-sm text-yellow-700">
-                                <strong>Note:</strong> The unofficial LinkedIn API (using username/password) is no longer supported due to LinkedIn's security measures. 
-                                Apify is the recommended alternative that works reliably.
+                            <p class="text-sm text-green-700">
+                                <strong>Apify is now your ONLY data source!</strong> No need for Google, Yelp, or other API keys. Everything comes from LinkedIn via Apify.
                             </p>
                         </div>
                     </div>
@@ -78,13 +76,23 @@
                 <div class="grid grid-cols-3 gap-4">
                     <dt class="text-sm font-medium text-gray-500">Next Steps</dt>
                     <dd class="text-sm text-gray-900 col-span-2">
-                        Your token is saved. When you search for businesses, the system will use Apify to find LinkedIn profiles in your target industries.
+                        Your token is saved. When you click "Find Real Businesses", the system will use Apify to find LinkedIn profiles in your target industries.
                         <a href="https://console.apify.com" target="_blank" class="block mt-2 text-indigo-600 hover:text-indigo-500">
                             Check your Apify console for usage and credits →
                         </a>
                     </dd>
                 </div>
             </dl>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+        <div class="flex">
+            <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                    <strong>⚠️ No API token yet!</strong> You need to add your Apify token above before you can find real businesses.
+                </p>
+            </div>
         </div>
     </div>
     {% endif %}

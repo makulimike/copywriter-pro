@@ -17,7 +17,7 @@
             <form action="/campaign/{{ campaign.campaign_id }}/discover-businesses" method="POST" class="inline">
                 <button type="submit" 
                         class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    Find Real Businesses
+                    🔍 Find Real Businesses (Apify)
                 </button>
             </form>
             <form action="/campaign/{{ campaign.campaign_id }}/send-emails" method="POST" class="inline" id="sendEmailsForm">
@@ -77,7 +77,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
         <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
             <div class="px-4 py-5 sm:p-6">
                 <dt class="text-sm font-medium text-gray-500 truncate">Total Leads</dt>
@@ -94,12 +94,6 @@
             <div class="px-4 py-5 sm:p-6">
                 <dt class="text-sm font-medium text-gray-500 truncate">Emails Sent</dt>
                 <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ stats.emails_sent }}</dd>
-            </div>
-        </div>
-        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div class="px-4 py-5 sm:p-6">
-                <dt class="text-sm font-medium text-gray-500 truncate">With Phone</dt>
-                <dd class="mt-1 text-3xl font-semibold text-indigo-600">{{ stats.leads_with_phone }}</dd>
             </div>
         </div>
     </div>
@@ -129,14 +123,14 @@
                         Upload
                     </button>
                 </div>
-                <p class="mt-2 text-xs text-gray-500">CSV should have columns: name, company, email, website, industry, location, country, phone, linkedin_url, job_title</p>
+                <p class="mt-2 text-xs text-gray-500">CSV should have columns: name, company, email, website, industry, location, country, linkedin_url, job_title, phone</p>
             </form>
         </div>
     </div>
 
     <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
         <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-            <h3 class="text-lg font-medium text-gray-900">Leads</h3>
+            <h3 class="text-lg font-medium text-gray-900">Leads (from Apify)</h3>
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200">

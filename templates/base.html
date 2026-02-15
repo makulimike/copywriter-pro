@@ -43,8 +43,8 @@
                         <a href="/settings/email" class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium {% if request.path == '/settings/email' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %}">
                             Email
                         </a>
-                        <a href="/settings/linkedin" class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium {% if request.path == '/settings/linkedin' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %}">
-                            LinkedIn
+                        <a href="/settings/apify" class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium {% if request.path == '/settings/apify' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %}">
+                            Apify
                         </a>
                     </div>
                     {% endif %}
@@ -65,7 +65,7 @@
                     {% endif %}
                 </div>
             </div>
-            <!-- Mobile menu, show/hide based on menu state -->
+            <!-- Mobile menu -->
             <div class="hidden md:hidden" id="mobile-menu">
                 <div class="pt-2 pb-3 space-y-1">
                     <a href="/dashboard" class="block pl-3 pr-4 py-2 border-l-4 text-base font-medium {% if request.path == '/dashboard' %}border-indigo-500 text-indigo-700 bg-indigo-50{% else %}border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800{% endif %}">
@@ -80,8 +80,8 @@
                     <a href="/settings/email" class="block pl-3 pr-4 py-2 border-l-4 text-base font-medium {% if request.path == '/settings/email' %}border-indigo-500 text-indigo-700 bg-indigo-50{% else %}border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800{% endif %}">
                         Email Settings
                     </a>
-                    <a href="/settings/linkedin" class="block pl-3 pr-4 py-2 border-l-4 text-base font-medium {% if request.path == '/settings/linkedin' %}border-indigo-500 text-indigo-700 bg-indigo-50{% else %}border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800{% endif %}">
-                        LinkedIn Settings
+                    <a href="/settings/apify" class="block pl-3 pr-4 py-2 border-l-4 text-base font-medium {% if request.path == '/settings/apify' %}border-indigo-500 text-indigo-700 bg-indigo-50{% else %}border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800{% endif %}">
+                        Apify Settings
                     </a>
                 </div>
                 <div class="pt-4 pb-3 border-t border-gray-200">
