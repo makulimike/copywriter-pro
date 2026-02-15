@@ -1,6 +1,6 @@
 """
 FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - SIMPLIFIED
-Discover businesses via Apify (LinkedIn, Google Maps) and send cold emails.
+Discover businesses via Apify (LinkedIn Company Scraper + Google Maps) and send cold emails.
 No reply monitoring, no meeting scheduling.
 """
 
@@ -460,7 +460,7 @@ class Database:
 # ============================================================================
 
 class ApifyDiscovery:
-    """Lead discovery using various Apify actors (LinkedIn, Google Maps, etc.)"""
+    """Lead discovery using various Apify actors (LinkedIn Company Scraper, Google Maps, etc.)"""
 
     def __init__(self, api_token=None):
         self.api_token = api_token
@@ -476,54 +476,53 @@ class ApifyDiscovery:
         return self.authenticated
 
     def search_linkedin_people(self, company_name: str, job_titles: List[str] = None, max_results: int = 10) -> List[Dict]:
-        """Search LinkedIn for people at a company using Apify's official LinkedIn Profile Scraper."""
+        """
+        Search for people at a specific company using dev_fusion's LinkedIn Company Scraper.
+        Actor: dev_fusion/Linkedin-Company-Scraper
+        """
         if not self.authenticated or not self.client:
             print("❌ Apify not configured")
             return []
 
         leads = []
         try:
-            print(f"🔍 Apify: Searching LinkedIn for employees at {company_name}")
-
-            query = f"site:linkedin.com/in/ \"{company_name}\""
-            if job_titles and len(job_titles) > 0:
-                query += f" \"{job_titles[0]}\""
-
-            encoded_query = quote_plus(query)
-            search_url = f"https://www.linkedin.com/search/results/people/?keywords={encoded_query}"
+            print(f"🔍 Apify: Searching for employees at {company_name}")
 
             run_input = {
-                "searchUrl": search_url,
+                "companyName": company_name,
                 "maxResults": max_results,
+                "getEmail": True,          # try to fetch emails
+                "getPhone": True,           # try to fetch phone numbers
             }
+            if job_titles and len(job_titles) > 0:
+                run_input["jobTitles"] = job_titles
 
-            print(f"🚀 Calling Apify actor: apify/linkedin-profile-scraper")
-            run = self.client.actor("apify/linkedin-profile-scraper").call(run_input=run_input)
+            print(f"🚀 Calling Apify actor: dev_fusion/Linkedin-Company-Scraper")
+            run = self.client.actor("dev_fusion/Linkedin-Company-Scraper").call(run_input=run_input)
 
             if run and run.get("defaultDatasetId"):
                 dataset = self.client.dataset(run["defaultDatasetId"])
                 count = 0
                 for item in dataset.iterate_items():
-                    name = item.get('fullName', '') or f"{item.get('firstName', '')} {item.get('lastName', '')}".strip()
                     lead = {
-                        'name': name,
+                        'name': f"{item.get('firstName', '')} {item.get('lastName', '')}".strip(),
                         'company': company_name,
-                        'job_title': item.get('headline', ''),
+                        'job_title': item.get('jobTitle', ''),
                         'linkedin_url': item.get('profileUrl', ''),
                         'location': item.get('location', ''),
                         'country': self._extract_country(item.get('location', '')),
-                        'email': '',
-                        'phone': '',
-                        'industry': item.get('industry', ''),
+                        'email': item.get('email', ''),
+                        'phone': item.get('phone', ''),
+                        'industry': '',
                         'source': LeadSource.APIFY_LINKEDIN.value
                     }
                     leads.append(lead)
                     count += 1
                     if count >= max_results:
                         break
-                print(f"✅ Apify: Found {len(leads)} employees on LinkedIn")
+                print(f"✅ Apify: Found {len(leads)} employees at {company_name}")
             else:
-                print(f"⚠️ Apify: No LinkedIn results for {company_name}")
+                print(f"⚠️ Apify: No results for {company_name}")
 
         except Exception as e:
             print(f"❌ Apify LinkedIn error: {e}")
@@ -565,7 +564,7 @@ class ApifyDiscovery:
                         'email': '',
                         'phone': item.get('phone', ''),
                         'website': item.get('website', ''),
-                        'industry': search_term,  # Use search term as industry
+                        'industry': search_term,
                         'source': LeadSource.APIFY_GOOGLE_MAPS.value
                     }
                     leads.append(lead)
@@ -608,7 +607,7 @@ class BusinessDiscovery:
             base_terms.extend(['online store', 'ecommerce', 'retail website'])
         elif industry.lower() == 'marketing':
             base_terms.extend(['marketing agency', 'digital marketing', 'advertising firm'])
-        return base_terms[:2]  # Limit to avoid too many queries
+        return base_terms[:2]
 
     def _get_companies_for_industry(self, industry: str, limit: int = 5) -> List[str]:
         """Get sample company names for LinkedIn search."""
@@ -651,7 +650,7 @@ class BusinessDiscovery:
                         max_results=max_businesses // 6
                     )
                     all_businesses.extend(leads)
-                    time.sleep(1)  # Rate limit avoidance
+                    time.sleep(1)
 
             # --- Google Maps Search ---
             for industry in campaign.ideal_industries[:2]:
@@ -1240,7 +1239,7 @@ def main():
     print("="*60)
     print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM")
     print("="*60)
-    print("Powered by Apify (LinkedIn + Google Maps)")
+    print("Powered by Apify (LinkedIn Company Scraper + Google Maps)")
     print("No other API keys needed - just your Apify token")
     print("Manual discovery only - click 'Find Real Businesses'")
     create_default_user()
