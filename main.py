@@ -1,7 +1,12 @@
 """
-FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - SIMPLIFIED
+FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - FIXED VERSION
 Discover businesses via Apify (LinkedIn Company Employees + Google Maps) and send cold emails.
 No reply monitoring, no meeting scheduling.
+
+FIXES APPLIED:
+- Updated LinkedIn actor from "curious_coder/linkedin-company-employees-scraper" to "harvestapi/linkedin-company-employees"
+- Updated Google Maps actor from "compass/google-maps-scraper" to "compass/crawler-google-places"
+- Fixed input parameters to match actor requirements
 """
 
 import os
@@ -87,6 +92,7 @@ class Lead:
     linkedin_profile: Optional[Dict] = None
     job_title: str = ""
     phone: str = ""
+    source: str = LeadSource.MANUAL.value
 
 @dataclass
 class Campaign:
@@ -456,7 +462,7 @@ class Database:
         return emails
 
 # ============================================================================
-# APIFY DISCOVERY (Multiple Sources)
+# APIFY DISCOVERY (Multiple Sources) - FIXED VERSION
 # ============================================================================
 
 class ApifyDiscovery:
@@ -477,8 +483,8 @@ class ApifyDiscovery:
 
     def search_linkedin_people(self, company_name: str, job_titles: List[str] = None, max_results: int = 10) -> List[Dict]:
         """
-        Search for people at a specific company using curious_coder's LinkedIn Company Employees Scraper.
-        Actor: curious_coder/linkedin-company-employees-scraper
+        Search for people at a specific company using HarvestAPI's LinkedIn Company Employees Scraper.
+        Actor: harvestapi/linkedin-company-employees
         """
         if not self.authenticated or not self.client:
             print("❌ Apify not configured")
@@ -488,31 +494,31 @@ class ApifyDiscovery:
         try:
             print(f"🔍 Apify: Searching for employees at {company_name}")
 
-            # The actor expects a company name
+            # The actor expects a list of company URLs or names
             run_input = {
-                "company": company_name,
-                "maxResults": max_results,
+                "companyUrls": [company_name],  # Can be company name or LinkedIn company URL
+                "maxEmployees": max_results,
+                "profileScraperMode": "short"  # Use 'short' mode for basic data (cheaper)
             }
-            if job_titles and len(job_titles) > 0:
-                run_input["jobTitle"] = job_titles[0]  # Some actors support job title filter
 
-            print(f"🚀 Calling Apify actor: curious_coder/linkedin-company-employees-scraper")
-            run = self.client.actor("curious_coder/linkedin-company-employees-scraper").call(run_input=run_input)
+            print(f"🚀 Calling Apify actor: harvestapi/linkedin-company-employees")
+            run = self.client.actor("harvestapi/linkedin-company-employees").call(run_input=run_input)
 
             if run and run.get("defaultDatasetId"):
                 dataset = self.client.dataset(run["defaultDatasetId"])
                 count = 0
                 for item in dataset.iterate_items():
+                    # Extract data from the harvestapi response format
                     lead = {
-                        'name': f"{item.get('firstName', '')} {item.get('lastName', '')}".strip(),
+                        'name': item.get('fullName', '').strip(),
                         'company': company_name,
-                        'job_title': item.get('jobTitle', ''),
-                        'linkedin_url': item.get('profileUrl', item.get('url', '')),
+                        'job_title': item.get('headline', ''),
+                        'linkedin_url': item.get('profileUrl', ''),
                         'location': item.get('location', ''),
                         'country': self._extract_country(item.get('location', '')),
-                        'email': item.get('email', ''),
-                        'phone': item.get('phone', ''),
-                        'industry': item.get('industry', ''),
+                        'email': '',  # Email search requires paid mode
+                        'phone': '',
+                        'industry': '',
                         'source': LeadSource.APIFY_LINKEDIN.value
                     }
                     leads.append(lead)
@@ -531,7 +537,10 @@ class ApifyDiscovery:
         return leads
 
     def search_google_maps(self, search_term: str, location: str = "", max_results: int = 20) -> List[Dict]:
-        """Search for businesses on Google Maps using Apify's official Google Maps Scraper."""
+        """
+        Search for businesses on Google Maps using Compass's Google Places Scraper.
+        Actor: compass/crawler-google-places
+        """
         if not self.authenticated or not self.client:
             print("❌ Apify not configured")
             return []
@@ -540,14 +549,26 @@ class ApifyDiscovery:
         try:
             print(f"🔍 Apify: Searching Google Maps for '{search_term}' in '{location or 'any'}'")
 
+            # Build the search query
+            if location:
+                search_query = f"{search_term} in {location}"
+            else:
+                search_query = search_term
+
             run_input = {
-                "search": search_term,
-                "location": location if location else "United States",
-                "maxResults": max_results,
-                "includeReviews": False,
+                "searchStringsArray": [search_query],
+                "maxCrawledPlacesPerSearch": max_results,
+                "language": "en",
+                "deeperCityScrape": False,
+                "scrapeReviewerName": False,
+                "scrapeReviewerUrl": False,
+                "scrapeReviewId": False,
+                "scrapeReviewUrl": False,
+                "scrapeResponseFromOwnerText": False,
             }
 
-            run = self.client.actor("compass/google-maps-scraper").call(run_input=run_input)
+            print(f"🚀 Calling Apify actor: compass/crawler-google-places")
+            run = self.client.actor("compass/crawler-google-places").call(run_input=run_input)
 
             if run and run.get("defaultDatasetId"):
                 dataset = self.client.dataset(run["defaultDatasetId"])
@@ -559,7 +580,7 @@ class ApifyDiscovery:
                         'job_title': '',
                         'linkedin_url': '',
                         'location': item.get('address', ''),
-                        'country': item.get('country', ''),
+                        'country': item.get('addressCountry', ''),
                         'email': '',
                         'phone': item.get('phone', ''),
                         'website': item.get('website', ''),
@@ -638,24 +659,24 @@ class BusinessDiscovery:
                 print("❌ Apify authentication failed")
                 return []
 
-            # --- LinkedIn Search ---
-            for industry in campaign.ideal_industries[:2]:
-                companies = self._get_companies_for_industry(industry, limit=3)
+            # --- LinkedIn Search (reduced to avoid rate limits) ---
+            for industry in campaign.ideal_industries[:1]:  # Only search first industry
+                companies = self._get_companies_for_industry(industry, limit=2)  # Limit to 2 companies
                 print(f"🔍 LinkedIn: Searching {industry} companies: {companies}")
                 for company in companies:
                     leads = apify.search_linkedin_people(
                         company,
                         job_titles=campaign.ideal_job_titles,
-                        max_results=max_businesses // 6
+                        max_results=max_businesses // 4  # Reduce per-company results
                     )
                     all_businesses.extend(leads)
-                    time.sleep(1)
+                    time.sleep(2)  # Add delay between requests
 
             # --- Google Maps Search ---
             for industry in campaign.ideal_industries[:2]:
                 search_terms = self._get_search_terms_for_industry(industry)
                 locations = campaign.ideal_locations if campaign.ideal_locations else ['']
-                for term in search_terms:
+                for term in search_terms[:1]:  # Limit to 1 search term per industry
                     for loc in locations[:2]:
                         if not loc and not campaign.search_globally:
                             continue
@@ -664,10 +685,10 @@ class BusinessDiscovery:
                         leads = apify.search_google_maps(
                             search_term=term,
                             location=loc,
-                            max_results=max_businesses // 6
+                            max_results=max_businesses // 4
                         )
                         all_businesses.extend(leads)
-                        time.sleep(1)
+                        time.sleep(2)  # Add delay between requests
 
         except Exception as e:
             print(f"❌ Discovery error: {e}")
@@ -1084,7 +1105,7 @@ def send_emails(campaign_id):
     return redirect(url_for('campaign_detail', campaign_id=campaign_id))
 
 @app.route('/campaign/<campaign_id>/discover-businesses', methods=['POST'])
-def discover_businesses(campaign_id):
+def discover_businesses_route(campaign_id):
     if 'user_id' not in session:
         return redirect(url_for('index'))
     campaign = db.get_campaign(campaign_id)
@@ -1236,11 +1257,12 @@ def open_browser():
 
 def main():
     print("="*60)
-    print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM")
+    print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - FIXED")
     print("="*60)
-    print("Powered by Apify (LinkedIn Company Employees + Google Maps)")
-    print("No other API keys needed - just your Apify token")
-    print("Manual discovery only - click 'Find Real Businesses'")
+    print("Powered by Apify (LinkedIn + Google Maps)")
+    print("✅ FIXED: Updated to use correct Apify actors")
+    print("   - harvestapi/linkedin-company-employees")
+    print("   - compass/crawler-google-places")
     create_default_user()
     print("\n✅ System ready!")
     print("🔗 http://localhost:5000")
