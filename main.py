@@ -1221,7 +1221,7 @@ class LeadProcessor:
         return min(100, score)
 
 # ============================================================================
-# ANALYTICS ENGINE - FIXED VERSION
+# ANALYTICS ENGINE - COMPLETELY FIXED VERSION
 # ============================================================================
 
 class AnalyticsEngine:
@@ -1229,7 +1229,26 @@ class AnalyticsEngine:
     def get_campaign_stats(db: Database, user_id: str, campaign_id: str) -> Dict:
         campaign = db.get_campaign(campaign_id)
         if not campaign:
-            return {}
+            return {
+                'campaign_name': 'Unknown',
+                'total_leads': 0,
+                'hot_leads': 0,
+                'cold_leads': 0,
+                'avg_rating': 0,
+                'total_sent': 0,
+                'countries_found': 0,
+                'country_breakdown': '',
+                'contact_availability': {
+                    'email': 0, 'phone': 0, 'facebook': 0, 'website': 0
+                },
+                'channel_stats': {
+                    'email': {'sent': 0, 'failed': 0, 'read': 0, 'replied': 0},
+                    'whatsapp': {'sent': 0, 'failed': 0, 'read': 0, 'replied': 0},
+                    'facebook': {'sent': 0, 'failed': 0, 'read': 0, 'replied': 0}
+                },
+                'total_messages': 0,
+                'total_failed': 0
+            }
         
         leads = db.get_campaign_leads(user_id, campaign_id)
         total = len(leads)
@@ -1294,11 +1313,17 @@ class AnalyticsEngine:
         sorted_countries = sorted(countries.items(), key=lambda x: x[1], reverse=True)[:5]
         country_str = "\n".join(f"{c}: {v}" for c, v in sorted_countries)
 
-        # Calculate total sent messages
-        total_sent = sum(
-            channel_stats['email']['sent'] +
-            channel_stats['whatsapp']['sent'] +
+        # Calculate total sent messages - FIXED: No sum() on integer
+        total_sent = (
+            channel_stats['email']['sent'] + 
+            channel_stats['whatsapp']['sent'] + 
             channel_stats['facebook']['sent']
+        )
+        
+        total_failed = (
+            channel_stats['email']['failed'] + 
+            channel_stats['whatsapp']['failed'] + 
+            channel_stats['facebook']['failed']
         )
 
         return {
@@ -1308,6 +1333,7 @@ class AnalyticsEngine:
             'cold_leads': cold,
             'avg_rating': round(avg_rating, 1),
             'total_sent': total_sent,
+            'total_failed': total_failed,
             'countries_found': len(countries),
             'country_breakdown': country_str,
             'contact_availability': {
@@ -1317,12 +1343,7 @@ class AnalyticsEngine:
                 'website': with_website
             },
             'channel_stats': channel_stats,
-            'total_messages': len(messages),
-            'total_failed': sum(
-                channel_stats['email']['failed'] +
-                channel_stats['whatsapp']['failed'] +
-                channel_stats['facebook']['failed']
-            )
+            'total_messages': len(messages)
         }
 
 # ============================================================================
@@ -1482,11 +1503,12 @@ def dashboard():
             print(f"Error getting stats for campaign {c.campaign_id}: {e}")
             # Append empty stats to maintain order
             stats.append({
+                'campaign_name': c.name,
                 'total_leads': 0,
                 'emails_sent': 0,
                 'hot_leads': 0,
                 'avg_rating': 0,
-                'campaign_name': c.name
+                'total_sent': 0
             })
     
     return render_template('dashboard.html', campaigns=campaigns, stats=stats, user=user)
