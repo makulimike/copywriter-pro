@@ -1967,4 +1967,7 @@ def main():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"🚀 Starting Flask app on port {port}")
+    print(f"🌐 Binding to 0.0.0.0:{port}")
+    
+    # Make sure the app is properly configured for production
     app.run(host='0.0.0.0', port=port, debug=False)
