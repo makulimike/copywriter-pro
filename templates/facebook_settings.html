@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Facebook Settings - Copywriter Pro{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>👥 Facebook Messenger Settings</h1>
+    
+    <div style="background: #e8f4fd; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+        <h3 style="color: #2c3e50; margin-bottom: 1rem;">📌 Facebook Setup Instructions:</h3>
+        <ol style="margin-left: 1.5rem; line-height: 1.8;">
+            <li>Go to <a href="https://developers.facebook.com/apps" target="_blank">Facebook Developers</a></li>
+            <li>Create a new app or select existing one</li>
+            <li>Add "Messenger" product to your app</li>
+            <li>Connect your Facebook Page</li>
+            <li>Generate a Page Access Token</li>
+            <li>Copy your Page ID and Token below</li>
+        </ol>
+        <p style="margin-top: 1rem; padding: 0.5rem; background: #fff3cd; border-radius: 4px;">
+            <strong>⚠️ Note:</strong> Tokens expire after 60-90 days. You'll need to refresh them periodically.
+        </p>
+    </div>
+
+    <form method="POST">
+        <div style="margin-bottom: 1.5rem;">
+            <label for="facebook_page_id" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Facebook Page ID:</label>
+            <input type="text" id="facebook_page_id" name="facebook_page_id" 
+                   value="{{ user.facebook_page_id or '' }}" 
+                   placeholder="123456789012345"
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+            <p style="color: #7f8c8d; margin-top: 0.25rem;">Find your Page ID in "About" section of your page</p>
+        </div>
+
+        <div style="margin-bottom: 2rem;">
+            <label for="facebook_page_token" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Page Access Token:</label>
+            <textarea id="facebook_page_token" name="facebook_page_token" rows="4"
+                      style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: monospace;">{{ user.facebook_page_token or '' }}</textarea>
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="btn btn-primary">Save Facebook Settings</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ecf0f1;">
+
+    <h3>📝 Messenger Tips:</h3>
+    <ul style="margin-left: 1.5rem; margin-top: 1rem; color: #34495e; line-height: 1.8;">
+        <li><strong>Be conversational:</strong> Messenger is more personal than email</li>
+        <li><strong>Use first names:</strong> Start with "Hi [Name]"</li>
+        <li><strong>Keep it brief:</strong> 2-3 sentences maximum</li>
+        <li><strong>Include a question:</strong> Encourage replies</li>
+        <li><strong>Example:</strong> "Hi [Name], love what [Company] is doing in [Industry]. Can I help with your content?"</li>
+    </ul>
+</div>
+{% endblock %}

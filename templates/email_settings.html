@@ -1,43 +1,53 @@
 {% extends "base.html" %}
-{% block title %}Email Settings{% endblock %}
+
+{% block title %}Email Settings - Copywriter Pro{% endblock %}
+
 {% block content %}
-<div class="px-4 sm:px-0">
-    <h1 class="text-3xl font-bold text-gray-900 mb-8">Email Settings</h1>
-
-    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-            <h3 class="text-lg font-medium text-gray-900">Configure Email for Sending</h3>
-            <p class="mt-1 text-sm text-gray-500">Set up your email account to send campaign emails.</p>
-        </div>
-        <div class="px-6 py-5">
-            <form action="/settings/email" method="POST" class="space-y-6">
-                <div>
-                    <label for="email_host" class="block text-sm font-medium text-gray-700">SMTP Server</label>
-                    <input type="text" name="email_host" id="email_host" value="{{ user.email_host or 'smtp.gmail.com' }}"
-                           class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                    <p class="mt-1 text-xs text-gray-500">For Gmail: smtp.gmail.com | For Outlook: smtp.office365.com</p>
-                </div>
-
-                <div>
-                    <label for="email_user" class="block text-sm font-medium text-gray-700">Email Address</label>
-                    <input type="email" name="email_user" id="email_user" value="{{ user.email_user }}"
-                           class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                </div>
-
-                <div>
-                    <label for="email_password" class="block text-sm font-medium text-gray-700">Password / App Password</label>
-                    <input type="password" name="email_password" id="email_password" value="{{ user.email_password }}"
-                           class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                </div>
-
-                <div class="flex space-x-4">
-                    <button type="submit"
-                            class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        Save Settings
-                    </button>
-                </div>
-            </form>
-        </div>
+<div class="card">
+    <h1>📧 Email Settings</h1>
+    
+    <div style="background: #e8f4fd; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+        <h3 style="color: #2c3e50; margin-bottom: 1rem;">📌 Gmail Setup Instructions:</h3>
+        <ol style="margin-left: 1.5rem; line-height: 1.8;">
+            <li>Enable 2-Factor Authentication on your Gmail account</li>
+            <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank">App Passwords</a></li>
+            <li>Select "Mail" and "Other" (name it "Copywriter Pro")</li>
+            <li>Copy the 16-character password</li>
+            <li>Use that password below (not your regular Gmail password)</li>
+        </ol>
     </div>
+
+    <form method="POST">
+        <div style="margin-bottom: 1.5rem;">
+            <label for="email_host" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">SMTP Host:</label>
+            <input type="text" id="email_host" name="email_host" value="{{ user.email_host or 'smtp.gmail.com' }}" 
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label for="email_user" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Email Address:</label>
+            <input type="email" id="email_user" name="email_user" value="{{ user.email_user or '' }}" 
+                   placeholder="your@gmail.com"
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+
+        <div style="margin-bottom: 2rem;">
+            <label for="email_password" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">App Password:</label>
+            <input type="password" id="email_password" name="email_password" value="{{ user.email_password or '' }}" 
+                   placeholder="16-character app password"
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+            <p style="color: #7f8c8d; margin-top: 0.25rem;">For Gmail, use an App Password, not your regular password</p>
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="btn btn-primary">Save Email Settings</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ecf0f1;">
+
+    <h3>📝 Email Simulation Mode</h3>
+    <p>If you don't configure email settings, the system will run in simulation mode - showing what would be sent without actually sending.</p>
 </div>
 {% endblock %}

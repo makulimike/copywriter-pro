@@ -1,72 +1,108 @@
 {% extends "base.html" %}
-{% block title %}Analytics{% endblock %}
-{% block content %}
-<div class="px-4 sm:px-0">
-    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">Analytics Dashboard</h1>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
-        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div class="px-4 py-5 sm:p-6">
-                <dt class="text-sm font-medium text-gray-500 truncate">Total Campaigns</dt>
-                <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ total_campaigns }}</dd>
-            </div>
+{% block title %}Analytics - Copywriter Pro{% endblock %}
+
+{% block content %}
+<h1>📈 Analytics Dashboard</h1>
+
+<!-- Global Stats -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 2rem 0;">
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 2.5rem; font-weight: bold; color: #3498db;">{{ total_campaigns }}</div>
+        <div style="color: #7f8c8d;">Campaigns</div>
+    </div>
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 2.5rem; font-weight: bold; color: #27ae60;">{{ total_leads }}</div>
+        <div style="color: #7f8c8d;">Total Leads</div>
+    </div>
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 2.5rem; font-weight: bold; color: #e67e22;">{{ total_hot }}</div>
+        <div style="color: #7f8c8d;">Hot Leads</div>
+    </div>
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 2.5rem; font-weight: bold; color: #f39c12;">{{ total_messages }}</div>
+        <div style="color: #7f8c8d;">Messages Sent</div>
+    </div>
+</div>
+
+<!-- Channel Breakdown -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h2>📊 Channel Performance</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1rem;">
+        <div style="text-align: center;">
+            <div style="font-size: 2rem; font-weight: bold; color: #3498db;">{{ channel_totals.email }}</div>
+            <div style="color: #7f8c8d;">📧 Emails</div>
         </div>
-        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div class="px-4 py-5 sm:p-6">
-                <dt class="text-sm font-medium text-gray-500 truncate">Total Leads</dt>
-                <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ total_leads }}</dd>
-            </div>
+        <div style="text-align: center;">
+            <div style="font-size: 2rem; font-weight: bold; color: #27ae60;">{{ channel_totals.whatsapp }}</div>
+            <div style="color: #7f8c8d;">📱 WhatsApp</div>
         </div>
-        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div class="px-4 py-5 sm:p-6">
-                <dt class="text-sm font-medium text-gray-500 truncate">Hot Leads</dt>
-                <dd class="mt-1 text-3xl font-semibold text-green-600">{{ total_hot }}</dd>
-            </div>
-        </div>
-        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div class="px-4 py-5 sm:p-6">
-                <dt class="text-sm font-medium text-gray-500 truncate">Emails Sent</dt>
-                <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ total_emails }}</dd>
-            </div>
-        </div>
-        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-            <div class="px-4 py-5 sm:p-6">
-                <dt class="text-sm font-medium text-gray-500 truncate">Leads with Phone</dt>
-                <dd class="mt-1 text-3xl font-semibold text-indigo-600">{{ total_with_phone }}</dd>
-            </div>
+        <div style="text-align: center;">
+            <div style="font-size: 2rem; font-weight: bold; color: #4267B2;">{{ channel_totals.facebook }}</div>
+            <div style="color: #7f8c8d;">👥 Facebook</div>
         </div>
     </div>
+</div>
 
+<!-- Campaign Stats -->
+{% if stats %}
     {% for stat in stats %}
-    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden mb-6">
-        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-            <h3 class="text-lg font-medium text-gray-900">{{ stat.campaign_name }}</h3>
+    <div class="card" style="margin-bottom: 2rem;">
+        <h2 style="margin-bottom: 1rem;">{{ stat.campaign_name }}</h2>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+            <div>
+                <div style="font-size: 1.5rem; font-weight: bold;">{{ stat.total_leads }}</div>
+                <div style="color: #7f8c8d;">Leads</div>
+            </div>
+            <div>
+                <div style="font-size: 1.5rem; font-weight: bold;">{{ stat.total_sent }}</div>
+                <div style="color: #7f8c8d;">Messages</div>
+            </div>
+            <div>
+                <div style="font-size: 1.5rem; font-weight: bold;">{{ stat.hot_leads }}</div>
+                <div style="color: #7f8c8d;">Hot</div>
+            </div>
+            <div>
+                <div style="font-size: 1.5rem; font-weight: bold;">{{ stat.avg_rating }}</div>
+                <div style="color: #7f8c8d;">Avg Rating</div>
+            </div>
         </div>
-        <div class="px-6 py-5">
-            <dl class="grid grid-cols-1 gap-6">
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <dt class="text-sm font-medium text-gray-500">Performance</dt>
-                    <dd class="text-sm text-gray-900 sm:col-span-2">
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            <div>Total Leads: <span class="font-semibold">{{ stat.total_leads }}</span></div>
-                            <div>Hot Leads: <span class="font-semibold text-green-600">{{ stat.hot_leads }}</span></div>
-                            <div>Cold Leads: <span class="font-semibold text-gray-600">{{ stat.cold_leads }}</span></div>
-                            <div>Emails Sent: <span class="font-semibold">{{ stat.emails_sent }}</span></div>
-                            <div>With Phone: <span class="font-semibold text-indigo-600">{{ stat.leads_with_phone }}</span></div>
-                            <div>Conversion Rate: <span class="font-semibold">{{ stat.conversion_rate }}%</span></div>
-                        </div>
-                    </dd>
-                </div>
-                
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <dt class="text-sm font-medium text-gray-500">Countries Found ({{ stat.countries_found }})</dt>
-                    <dd class="text-sm text-gray-900 sm:col-span-2 overflow-x-auto">
-                        <pre class="text-sm whitespace-pre-wrap bg-gray-50 p-3 rounded">{{ stat.country_breakdown or 'None' }}</pre>
-                    </dd>
-                </div>
-            </dl>
+        
+        <!-- Channel Stats for this campaign -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;">
+            <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+                <h4 style="color: #3498db;">📧 Email</h4>
+                <div>Sent: {{ stat.channel_stats.email.sent }}</div>
+                <div>Failed: {{ stat.channel_stats.email.failed }}</div>
+                <div>Read: {{ stat.channel_stats.email.read }}</div>
+                <div>Replied: {{ stat.channel_stats.email.replied }}</div>
+            </div>
+            <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+                <h4 style="color: #27ae60;">📱 WhatsApp</h4>
+                <div>Sent: {{ stat.channel_stats.whatsapp.sent }}</div>
+                <div>Failed: {{ stat.channel_stats.whatsapp.failed }}</div>
+                <div>Read: {{ stat.channel_stats.whatsapp.read }}</div>
+                <div>Replied: {{ stat.channel_stats.whatsapp.replied }}</div>
+            </div>
+            <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+                <h4 style="color: #4267B2;">👥 Facebook</h4>
+                <div>Sent: {{ stat.channel_stats.facebook.sent }}</div>
+                <div>Failed: {{ stat.channel_stats.facebook.failed }}</div>
+                <div>Read: {{ stat.channel_stats.facebook.read }}</div>
+                <div>Replied: {{ stat.channel_stats.facebook.replied }}</div>
+            </div>
+        </div>
+        
+        <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+            <h3 style="margin-bottom: 0.5rem;">📍 Top Locations:</h3>
+            <pre style="font-family: inherit;">{{ stat.country_breakdown }}</pre>
         </div>
     </div>
     {% endfor %}
-</div>
+{% else %}
+    <div class="card text-center">
+        <p style="color: #7f8c8d; padding: 3rem;">No campaign data yet. Create a campaign and start finding leads!</p>
+    </div>
+{% endif %}
 {% endblock %}

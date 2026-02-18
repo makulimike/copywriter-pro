@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}Manual Search - Copywriter Pro{% endblock %}
+
+{% block extra_css %}
+<style>
+    .search-form {
+        background: white;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    .results-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+        margin-top: 2rem;
+    }
+    
+    .business-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 1.5rem;
+        transition: all 0.2s;
+    }
+    
+    .business-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .business-name {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 0.5rem;
+    }
+    
+    .business-detail {
+        margin: 0.5rem 0;
+        color: #5a6a7a;
+    }
+    
+    .rating {
+        color: #f39c12;
+        font-weight: 600;
+    }
+    
+    .website-link {
+        color: #3498db;
+        text-decoration: none;
+        word-break: break-all;
+    }
+    
+    .website-link:hover {
+        text-decoration: underline;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        background: #e1f0fa;
+        color: #2980b9;
+    }
+    
+    .checkbox-select {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    
+    .campaign-selector {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        display: none;
+        z-index: 1000;
+        min-width: 300px;
+    }
+    
+    .campaign-selector.show {
+        display: block;
+    }
+    
+    .loading {
+        text-align: center;
+        padding: 3rem;
+        color: #7f8c8d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>🔍 Manual Business Search</h1>
+<p style="color: #7f8c8d; margin-bottom: 2rem;">Search for any business type in any location using Google Places API</p>
+
+<div class="search-form">
+    <form method="POST" id="searchForm">
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 1rem; align-items: end;">
+            <div>
+                <label for="query" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">What to search for:</label>
+                <input type="text" id="query" name="query" required 
+                       placeholder="e.g., marketing agency, coffee shop, law firm"
+                       value="{{ request.form.get('query', '') }}"
+                       style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            
+            <div>
+                <label for="location" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Location (optional):</label>
+                <input type="text" id="location" name="location" 
+                       placeholder="e.g., New York, London"
+                       value="{{ request.form.get('location', '') }}"
+                       style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            
+            <div>
+                <label for="max_results" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Max results:</label>
+                <input type="number" id="max_results" name="max_results" 
+                       value="{{ request.form.get('max_results', 20) }}" min="1" max="60"
+                       style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="padding: 0.75rem 1.5rem;">Search</button>
+        </div>
+    </form>
+</div>
+
+{% if results %}
+<div style="background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>Results ({{ results|length }} found)</h2>
+        <button class="btn btn-success" onclick="showCampaignSelector()" id="saveBtn">Save Selected to Campaign</button>
+    </div>
+    
+    <div class="checkbox-select">
+        <label style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" id="select-all" onchange="toggleAll()"> 
+            <strong>Select All</strong>
+        </label>
+    </div>
+    
+    <div class="results-grid" id="results-grid">
+        {% for biz in results %}
+        <div class="business-card" data-business='{{ biz | tojson | safe }}'>
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                <input type="checkbox" class="business-checkbox" value="{{ loop.index0 }}" style="transform: scale(1.2);">
+                <span class="badge">{{ biz.industry or 'Business' }}</span>
+            </div>
+            
+            <div class="business-name">{{ biz.name }}</div>
+            
+            {% if biz.rating and biz.rating > 0 %}
+            <div class="business-detail rating">
+                ⭐ {{ biz.rating }} ({{ biz.total_ratings }} reviews)
+            </div>
+            {% endif %}
+            
+            {% if biz.location %}
+            <div class="business-detail">
+                📍 {{ biz.location }}
+            </div>
+            {% endif %}
+            
+            {% if biz.phone %}
+            <div class="business-detail">
+                📞 {{ biz.phone }}
+            </div>
+            {% endif %}
+            
+            {% if biz.website %}
+            <div class="business-detail">
+                🌐 <a href="{{ biz.website }}" target="_blank" class="website-link">{{ biz.website[:50] }}{% if biz.website|length > 50 %}...{% endif %}</a>
+            </div>
+            {% endif %}
+            
+            {% if biz.price_level and biz.price_level > 0 %}
+            <div class="business-detail">
+                💰 Price Level: {{ '💰' * biz.price_level }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Campaign Selector Modal -->
+<div class="campaign-selector" id="campaignSelector">
+    <h3 style="margin-bottom: 1rem;">Select Campaign</h3>
+    <select id="campaignSelect" style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 1px solid #ddd; border-radius: 4px;">
+        <option value="">-- Choose a campaign --</option>
+        {% for campaign in campaigns %}
+        <option value="{{ campaign.campaign_id }}">{{ campaign.name }}</option>
+        {% endfor %}
+    </select>
+    <div style="display: flex; gap: 0.5rem;">
+        <button class="btn btn-success" onclick="saveToCampaign()" style="flex: 1;">Save</button>
+        <button class="btn btn-secondary" onclick="hideCampaignSelector()" style="flex: 1;">Cancel</button>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let selectedBusinesses = [];
+    const campaigns = {{ campaigns|tojson }};
+    
+    function toggleAll() {
+        const selectAll = document.getElementById('select-all');
+        const checkboxes = document.querySelectorAll('.business-checkbox');
+        checkboxes.forEach(cb => cb.checked = selectAll.checked);
+    }
+    
+    function showCampaignSelector() {
+        // Get selected businesses
+        selectedBusinesses = [];
+        const checkboxes = document.querySelectorAll('.business-checkbox:checked');
+        const cards = document.querySelectorAll('.business-card');
+        
+        if (checkboxes.length === 0) {
+            alert('Please select at least one business');
+            return;
+        }
+        
+        checkboxes.forEach(cb => {
+            const index = parseInt(cb.value);
+            const businessData = cards[index].dataset.business;
+            if (businessData) {
+                selectedBusinesses.push(JSON.parse(businessData));
+            }
+        });
+        
+        document.getElementById('campaignSelector').classList.add('show');
+    }
+    
+    function hideCampaignSelector() {
+        document.getElementById('campaignSelector').classList.remove('show');
+    }
+    
+    function saveToCampaign() {
+        const campaignId = document.getElementById('campaignSelect').value;
+        if (!campaignId) {
+            alert('Please select a campaign');
+            return;
+        }
+        
+        const saveBtn = document.querySelector('#campaignSelector .btn-success');
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = 'Saving...';
+        saveBtn.disabled = true;
+        
+        fetch('/search/save-to-campaign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                campaign_id: campaignId,
+                businesses: selectedBusinesses
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Saved ${data.count} leads to campaign!`);
+                hideCampaignSelector();
+                // Uncheck all
+                document.querySelectorAll('.business-checkbox').forEach(cb => cb.checked = false);
+                document.getElementById('select-all').checked = false;
+            } else {
+                alert('❌ Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('❌ Error saving leads');
+            console.error(error);
+        })
+        .finally(() => {
+            saveBtn.textContent = originalText;
+            saveBtn.disabled = false;
+        });
+    }
+    
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        const modal = document.getElementById('campaignSelector');
+        if (event.target == modal) {
+            hideCampaignSelector();
+        }
+    }
+</script>
+{% endblock %}

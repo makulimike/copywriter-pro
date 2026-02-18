@@ -1,118 +1,161 @@
 {% extends "base.html" %}
-{% block title %}New Campaign{% endblock %}
+
+{% block title %}New Campaign - Copywriter Pro{% endblock %}
+
 {% block content %}
-<div class="px-4 sm:px-0">
-    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">Create New Campaign</h1>
+<div class="card">
+    <h1>🎯 Create New Campaign</h1>
+    <p style="color: #7f8c8d; margin-bottom: 2rem;">Define what businesses you want to find and how to reach them.</p>
+    
+    <form method="POST">
+        <!-- Basic Info -->
+        <div style="margin-bottom: 2rem;">
+            <label for="name" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Campaign Name:</label>
+            <input type="text" id="name" name="name" required placeholder="e.g., NYC Marketing Agencies 2024" 
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
 
-    <form action="/campaign/new" method="POST" class="space-y-8">
-        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-                <h3 class="text-lg font-medium leading-6 text-gray-900">Campaign Basics</h3>
-                <p class="mt-1 text-sm text-gray-500">Basic information about your outreach campaign.</p>
+        <!-- Search Settings -->
+        <div style="background: #f8f9fa; padding: 2rem; border-radius: 8px; margin-bottom: 2rem;">
+            <h2 style="color: #2c3e50; margin-bottom: 1.5rem;">🔍 Business Search</h2>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <label for="search_queries" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Search Queries <span style="color: #e74c3c;">*</span></label>
+                <input type="text" id="search_queries" name="search_queries" required 
+                       placeholder="marketing agency, advertising firm, digital marketing agency"
+                       style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+                <p class="help-text">Comma-separated list of business types</p>
             </div>
-            <div class="px-6 py-5">
-                <div class="grid grid-cols-1 md:grid-cols-6 gap-6">
-                    <div class="md:col-span-6">
-                        <label for="name" class="block text-sm font-medium text-gray-700">Campaign Name</label>
-                        <input type="text" name="name" id="name" value="Copywriter Outreach - Q1 2026" required
-                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <p class="mt-1 text-xs text-gray-500">Example: "Tech Startups Outreach"</p>
-                    </div>
 
-                    <div class="md:col-span-6">
-                        <label for="industries" class="block text-sm font-medium text-gray-700">Target Industries (comma-separated)</label>
-                        <input type="text" name="industries" id="industries" value="saas, fintech, e-commerce, healthtech" required
-                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <p class="mt-1 text-xs text-gray-500">Example: saas, fintech, e-commerce, healthtech</p>
-                    </div>
+            <div style="margin-bottom: 1.5rem;">
+                <label for="search_locations" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Locations</label>
+                <input type="text" id="search_locations" name="search_locations" 
+                       placeholder="New York, Los Angeles, Chicago"
+                       style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+                <p class="help-text">Comma-separated (leave empty for global)</p>
+            </div>
 
-                    <div class="md:col-span-3">
-                        <label for="locations" class="block text-sm font-medium text-gray-700">Target Locations (cities)</label>
-                        <input type="text" name="locations" id="locations" value="San Francisco, New York, London, Singapore"
-                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <p class="mt-1 text-xs text-gray-500">Example: San Francisco, New York, London, Singapore</p>
-                    </div>
-
-                    <div class="md:col-span-3">
-                        <label for="countries" class="block text-sm font-medium text-gray-700">Target Countries</label>
-                        <input type="text" name="countries" id="countries" value="United States, United Kingdom, Germany"
-                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <p class="mt-1 text-xs text-gray-500">Example: United States, United Kingdom, Germany</p>
-                    </div>
-
-                    <div class="md:col-span-6">
-                        <div class="flex items-start">
-                            <div class="flex items-center h-5">
-                                <input id="search_globally" name="search_globally" type="checkbox" checked
-                                       class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
-                            </div>
-                            <div class="ml-3 text-sm">
-                                <label for="search_globally" class="font-medium text-gray-700">Search globally</label>
-                                <p class="text-gray-500">Find real businesses worldwide, not just in specified locations</p>
-                            </div>
-                        </div>
-                    </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div>
+                    <label for="max_results_per_search">Max Results Per Search:</label>
+                    <input type="number" id="max_results_per_search" name="max_results_per_search" value="20" min="1" max="60"
+                           style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+                </div>
+                <div>
+                    <label for="min_rating">Minimum Rating:</label>
+                    <input type="number" id="min_rating" name="min_rating" value="0" min="0" max="5" step="0.5"
+                           style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
                 </div>
             </div>
         </div>
 
-        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-                <h3 class="text-lg font-medium leading-6 text-gray-900">Email Template</h3>
-                <p class="mt-1 text-sm text-gray-500">Use [Name], [Company], [Industry], [Country] as placeholders.</p>
+        <!-- Channel Selection -->
+        <div style="background: #f8f9fa; padding: 2rem; border-radius: 8px; margin-bottom: 2rem;">
+            <h2 style="color: #2c3e50; margin-bottom: 1.5rem;">📢 Outreach Channels</h2>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" name="channels_enabled" value="email" checked> 
+                    📧 Email
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" name="channels_enabled" value="whatsapp"> 
+                    📱 WhatsApp
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" name="channels_enabled" value="facebook"> 
+                    👥 Facebook Messenger
+                </label>
             </div>
-            <div class="px-6 py-5">
-                <div class="grid grid-cols-1 md:grid-cols-6 gap-6">
-                    <div class="md:col-span-6">
-                        <label for="email_subject" class="block text-sm font-medium text-gray-700">Email Subject</label>
-                        <input type="text" name="email_subject" id="email_subject" 
-                               value="Copywriting help for [Company]?" required
-                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <p class="mt-1 text-xs text-gray-500">Example: "Copywriting help for [Company]?"</p>
-                    </div>
 
-                    <div class="md:col-span-6">
-                        <label for="email_body" class="block text-sm font-medium text-gray-700">Email Body</label>
-                        <textarea name="email_body" id="email_body" rows="8" required
-                                  class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                                  >Hi [Name],
+            <div class="placeholders" style="background: #e8f4fd; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
+                <strong>Available placeholders for all channels:</strong><br>
+                <code>[Name]</code> - Lead's name<br>
+                <code>[Company]</code> - Company name<br>
+                <code>[Industry]</code> - Business industry<br>
+                <code>[Location]</code> - Business location<br>
+                <code>[Rating]</code> - Google rating
+            </div>
 
-I specialize in copywriting for [Industry] companies. I noticed [Company] is doing interesting work in [Country].
+            <!-- Email Template -->
+            <div class="channel-section" id="email-section">
+                <h3 style="margin-bottom: 1rem;">📧 Email Template</h3>
+                <div style="margin-bottom: 1rem;">
+                    <label for="email_subject">Email Subject:</label>
+                    <input type="text" id="email_subject" name="email_subject" 
+                           placeholder="e.g., Copywriting help for [Company]"
+                           style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+                </div>
+                <div>
+                    <label for="email_body">Email Body:</label>
+                    <textarea id="email_body" name="email_body" rows="6"
+                              style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">Hi [Name],
 
-Would you be open to a quick chat about how I could help with your copywriting needs?
+I noticed [Company] has great reviews ([Rating] stars) in [Location]. I'm a freelance copywriter specializing in [Industry].
 
-Best regards,
-[Your Name]</textarea>
-                        <p class="mt-1 text-xs text-gray-500">Example email with placeholders – edit as needed.</p>
-                    </div>
+Would you be open to a quick chat next week?
+
+Best regards</textarea>
+                </div>
+            </div>
+
+            <!-- WhatsApp Template -->
+            <div class="channel-section" id="whatsapp-section" style="display: none; margin-top: 2rem;">
+                <h3 style="margin-bottom: 1rem;">📱 WhatsApp Template</h3>
+                <div>
+                    <label for="whatsapp_template">WhatsApp Message:</label>
+                    <textarea id="whatsapp_template" name="whatsapp_template" rows="4"
+                              style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">Hi [Name], saw [Company] on Google Maps. Can I help with your [Industry] marketing? Happy to chat!</textarea>
+                    <p class="help-text">Keep WhatsApp messages short (under 500 characters)</p>
+                </div>
+            </div>
+
+            <!-- Facebook Template -->
+            <div class="channel-section" id="facebook-section" style="display: none; margin-top: 2rem;">
+                <h3 style="margin-bottom: 1rem;">👥 Facebook Messenger Template</h3>
+                <div>
+                    <label for="facebook_template">Messenger Message:</label>
+                    <textarea id="facebook_template" name="facebook_template" rows="4"
+                              style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">Hi [Name], love what [Company] is doing in [Industry]! I'm a copywriter - can I help with your content?</textarea>
                 </div>
             </div>
         </div>
 
-        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-                <h3 class="text-lg font-medium leading-6 text-gray-900">Notifications</h3>
-                <p class="mt-1 text-sm text-gray-500">Get email alerts when leads are hot.</p>
-            </div>
-            <div class="px-6 py-5">
-                <div class="grid grid-cols-1 md:grid-cols-6 gap-6">
-                    <div class="md:col-span-6">
-                        <label for="notify_email" class="block text-sm font-medium text-gray-700">Notification Email</label>
-                        <input type="email" name="notify_email" id="notify_email"
-                               value="your@email.com"
-                               class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                        <p class="mt-1 text-xs text-gray-500">Example: your@email.com</p>
-                    </div>
-                </div>
-            </div>
+        <!-- Notification -->
+        <div style="margin-bottom: 2rem;">
+            <label for="notify_email">Notification Email (optional):</label>
+            <input type="email" id="notify_email" name="notify_email" 
+                   placeholder="your@email.com"
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
         </div>
 
-        <div class="flex justify-end">
-            <button type="submit"
-                    class="w-full sm:w-auto inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                Create Campaign
-            </button>
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="btn btn-success">Create Campaign</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>
+
+<script>
+// Show/hide channel sections based on checkboxes
+document.querySelectorAll('input[name="channels_enabled"]').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        const section = document.getElementById(this.value + '-section');
+        if (section) {
+            section.style.display = this.checked ? 'block' : 'none';
+        }
+    });
+});
+</script>
+
+<style>
+.help-text {
+    color: #7f8c8d;
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+}
+.channel-section {
+    transition: all 0.3s ease;
+}
+</style>
 {% endblock %}

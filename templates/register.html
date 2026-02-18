@@ -1,51 +1,32 @@
 {% extends "base.html" %}
-{% block title %}Register{% endblock %}
+
+{% block title %}Register - Copywriter Pro{% endblock %}
+
 {% block content %}
-<div class="min-h-screen flex items-center justify-center">
-    <div class="max-w-md w-full">
-        <div class="text-center mb-8">
-            <h2 class="text-3xl font-extrabold text-gray-900">Create your account</h2>
-            <p class="mt-2 text-sm text-gray-600">
-                Or
-                <a href="/" class="font-medium text-indigo-600 hover:text-indigo-500">
-                    sign in to existing account
-                </a>
-            </p>
+<div class="card" style="max-width: 400px; margin: 0 auto;">
+    <h1 class="text-center mb-2">📝 Register</h1>
+    
+    <form method="POST" action="{{ url_for('register') }}">
+        <div style="margin-bottom: 1rem;">
+            <label for="username" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Username:</label>
+            <input type="text" id="username" name="username" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
         </div>
-        <div class="bg-white py-8 px-6 shadow-lg rounded-lg">
-            <form class="space-y-6" action="/register" method="POST">
-                <div>
-                    <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
-                    <div class="mt-1">
-                        <input id="username" name="username" type="text" required 
-                               class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                    </div>
-                </div>
-
-                <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
-                    <div class="mt-1">
-                        <input id="email" name="email" type="email" required 
-                               class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                    </div>
-                </div>
-
-                <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
-                    <div class="mt-1">
-                        <input id="password" name="password" type="password" required 
-                               class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                    </div>
-                </div>
-
-                <div>
-                    <button type="submit" 
-                            class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        Register
-                    </button>
-                </div>
-            </form>
+        
+        <div style="margin-bottom: 1rem;">
+            <label for="email" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Email:</label>
+            <input type="email" id="email" name="email" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
         </div>
-    </div>
+        
+        <div style="margin-bottom: 1.5rem;">
+            <label for="password" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Password:</label>
+            <input type="password" id="password" name="password" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Register</button>
+    </form>
+    
+    <p class="text-center mt-2">
+        Already have an account? <a href="{{ url_for('index') }}">Login here</a>
+    </p>
 </div>
 {% endblock %}

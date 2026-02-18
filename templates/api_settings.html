@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}API Settings - Copywriter Pro{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>🔑 Google Places API Settings</h1>
+    
+    <div style="background: #e8f4fd; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+        <h3 style="color: #2c3e50; margin-bottom: 1rem;">📌 How to get your API Key:</h3>
+        <ol style="margin-left: 1.5rem; line-height: 1.8;">
+            <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+            <li>Create a new project or select existing one</li>
+            <li>Enable the Places API (search for "Places API" in the library)</li>
+            <li>Go to "Credentials" → "Create Credentials" → "API Key"</li>
+            <li>Copy your new API key and paste it below</li>
+        </ol>
+        <p style="margin-top: 1rem; padding: 0.5rem; background: #fff3cd; border-radius: 4px;">
+            <strong>⚠️ Important:</strong> Enable billing for your project. Places API is not free, 
+            but Google gives $200 monthly credit which covers ~40,000 requests.
+        </p>
+    </div>
+
+    <form method="POST">
+        <div style="margin-bottom: 2rem;">
+            <label for="google_places_api_key" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Google Places API Key:</label>
+            <input type="text" id="google_places_api_key" name="google_places_api_key" 
+                   value="{{ user.google_places_api_key or '' }}" 
+                   placeholder="AIzaSy..." 
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; font-family: monospace;">
+            <p style="color: #7f8c8d; margin-top: 0.25rem;">Your key is stored securely and used only for business searches</p>
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="btn btn-primary">Save API Key</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ecf0f1;">
+
+    <h3>🔍 What you can search for:</h3>
+    <ul style="margin-left: 1.5rem; margin-top: 1rem; color: #34495e; line-height: 1.8;">
+        <li><strong>Business types:</strong> marketing agency, software company, law firm, restaurant, etc.</li>
+        <li><strong>Locations:</strong> New York, London, Tokyo, or specific addresses</li>
+        <li><strong>Combinations:</strong> "coffee shop in Seattle", "web designers in Austin"</li>
+    </ul>
+    <p style="margin-top: 1rem;">The API returns business name, address, phone number, website, rating, and more.</p>
+</div>
+{% endblock %}

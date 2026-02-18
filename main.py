@@ -1,12 +1,9 @@
 """
-FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - FIXED VERSION
-Discover businesses via Apify (LinkedIn Company Employees + Google Maps) and send cold emails.
-No reply monitoring, no meeting scheduling.
-
-FIXES APPLIED:
-- Updated LinkedIn actor from "curious_coder/linkedin-company-employees-scraper" to "harvestapi/linkedin-company-employees"
-- Updated Google Maps actor from "compass/google-maps-scraper" to "compass/crawler-google-places"
-- Fixed input parameters to match actor requirements
+FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - MULTI-CHANNEL VERSION
+Discover businesses via Google Places API and reach out via:
+- Email
+- WhatsApp
+- Facebook Messenger
 """
 
 import os
@@ -30,16 +27,10 @@ from contextlib import contextmanager
 import secrets
 from urllib.parse import quote_plus, urlparse
 import webbrowser
+import re
+import urllib.parse
 
 load_dotenv()
-
-# Apify
-try:
-    from apify_client import ApifyClient
-    APIFY_AVAILABLE = True
-except ImportError:
-    APIFY_AVAILABLE = False
-    print("⚠️ Apify client not installed. Discovery will be disabled.")
 
 # Flask
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
@@ -56,17 +47,28 @@ class LeadStatus(Enum):
     COLD = "cold"
     DEAD = "dead"
 
-class EmailStatus(Enum):
+class ChannelType(Enum):
+    EMAIL = "email"
+    WHATSAPP = "whatsapp"
+    FACEBOOK = "facebook"
+    SMS = "sms"
+    LINKEDIN = "linkedin"
+
+class MessageStatus(Enum):
     PENDING = "pending"
     SENDING = "sending"
     SENT = "sent"
     FAILED = "failed"
+    READ = "read"
+    REPLIED = "replied"
 
 class LeadSource(Enum):
     MANUAL = "manual"
     CSV = "csv"
-    APIFY_LINKEDIN = "apify_linkedin"
-    APIFY_GOOGLE_MAPS = "apify_google_maps"
+    GOOGLE_PLACES = "google_places"
+    MANUAL_SEARCH = "manual_search"
+    FACEBOOK = "facebook"
+    WHATSAPP = "whatsapp"
 
 @dataclass
 class Lead:
@@ -76,6 +78,9 @@ class Lead:
     name: str
     company: str
     email: str = ""
+    phone: str = ""  # For WhatsApp/SMS
+    facebook_url: str = ""  # For Facebook Messenger
+    facebook_id: str = ""  # Facebook Page/Profile ID
     website: str = ""
     industry: str = ""
     location: str = ""
@@ -84,15 +89,21 @@ class Lead:
     notes: str = ""
     status: str = LeadStatus.PENDING.value
     qualification_score: int = 0
-    email_status: str = EmailStatus.PENDING.value
-    email_sent_at: Optional[str] = None
     created_at: str = ""
     updated_at: str = ""
     linkedin_url: str = ""
     linkedin_profile: Optional[Dict] = None
     job_title: str = ""
-    phone: str = ""
     source: str = LeadSource.MANUAL.value
+    place_id: str = ""  # Google Place ID
+    rating: float = 0.0
+    total_ratings: int = 0
+    price_level: int = 0
+    business_status: str = ""
+    types: str = ""  # Business types/categories
+    preferred_channel: str = ChannelType.EMAIL.value  # Default channel
+    last_contacted: Optional[str] = None
+    contact_attempts: int = 0
 
 @dataclass
 class Campaign:
@@ -102,49 +113,71 @@ class Campaign:
     created_at: str
     status: str = "active"
 
+    # Search parameters
+    search_queries: List[str] = None
+    search_locations: List[str] = None
+    max_results_per_search: int = 20
+    
+    # Qualification criteria
     ideal_industries: List[str] = None
-    ideal_locations: List[str] = None
-    ideal_countries: List[str] = None
-    ideal_company_size: str = "any"
-    ideal_job_titles: List[str] = None
-    search_globally: bool = True
+    min_rating: float = 0.0
+    max_results: int = 100
 
+    # Multi-channel settings
+    channels_enabled: List[str] = None  # ['email', 'whatsapp', 'facebook']
+    
+    # Email settings
     email_subject: str = ""
     email_body: str = ""
+    
+    # WhatsApp settings
+    whatsapp_template: str = ""
+    whatsapp_enabled: bool = False
+    
+    # Facebook settings
+    facebook_template: str = ""
+    facebook_enabled: bool = False
+    
+    # Notification settings
     notify_email: str = ""
 
     def __post_init__(self):
+        if self.search_queries is None:
+            self.search_queries = []
+        if self.search_locations is None:
+            self.search_locations = []
         if self.ideal_industries is None:
             self.ideal_industries = []
-        if self.ideal_locations is None:
-            self.ideal_locations = []
-        if self.ideal_countries is None:
-            self.ideal_countries = []
-        if self.ideal_job_titles is None:
-            self.ideal_job_titles = []
+        if self.channels_enabled is None:
+            self.channels_enabled = ['email']
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Campaign':
         known_fields = {
             'campaign_id', 'user_id', 'name', 'created_at', 'status',
-            'ideal_industries', 'ideal_locations', 'ideal_countries',
-            'ideal_company_size', 'ideal_job_titles', 'search_globally',
-            'email_subject', 'email_body', 'notify_email'
+            'search_queries', 'search_locations', 'max_results_per_search',
+            'ideal_industries', 'min_rating', 'max_results',
+            'channels_enabled', 'email_subject', 'email_body',
+            'whatsapp_template', 'whatsapp_enabled',
+            'facebook_template', 'facebook_enabled',
+            'notify_email'
         }
         filtered_data = {k: v for k, v in data.items() if k in known_fields}
         return cls(**filtered_data)
 
 @dataclass
-class EmailRecord:
-    email_id: str
+class MessageRecord:
+    message_id: str
     lead_id: str
     campaign_id: str
     user_id: str
-    subject: str
-    body: str
+    channel: str  # email, whatsapp, facebook
+    content: str
     sent_at: str
     status: str
     error_message: Optional[str] = None
+    read_at: Optional[str] = None
+    replied_at: Optional[str] = None
 
 @dataclass
 class User:
@@ -154,10 +187,26 @@ class User:
     email: str
     created_at: str
     campaigns: List[str] = None
+    
+    # Email settings
     email_host: str = "smtp.gmail.com"
     email_user: str = ""
     email_password: str = ""
-    apify_api_token: str = ""
+    
+    # Google Places API
+    google_places_api_key: str = ""
+    
+    # WhatsApp Business API (or Twilio for SMS/WhatsApp)
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_whatsapp_number: str = ""  # Format: whatsapp:+14155238886
+    
+    # Facebook Messenger settings
+    facebook_page_id: str = ""
+    facebook_page_token: str = ""
+    
+    # Default sender name
+    sender_name: str = ""
 
     def __post_init__(self):
         if self.campaigns is None:
@@ -215,19 +264,51 @@ class Database:
         tables = self.execute_query("SELECT name FROM sqlite_master WHERE type='table'")
         table_names = [t['name'] for t in tables]
 
+        # Users table migrations
         if 'users' in table_names:
-            for col in ['email_host', 'email_user', 'email_password', 'apify_api_token']:
+            new_user_cols = ['twilio_account_sid', 'twilio_auth_token', 'twilio_whatsapp_number',
+                            'facebook_page_id', 'facebook_page_token', 'sender_name']
+            for col in new_user_cols:
                 if not self.column_exists('users', col):
                     self.execute_query(f"ALTER TABLE users ADD COLUMN {col} TEXT")
 
+        # Leads table migrations
         if 'leads' in table_names:
-            for col in ['linkedin_url', 'linkedin_profile', 'source', 'job_title', 'phone']:
+            new_lead_cols = ['phone', 'facebook_url', 'facebook_id', 'preferred_channel', 
+                            'last_contacted', 'contact_attempts']
+            for col in new_lead_cols:
                 if not self.column_exists('leads', col):
                     self.execute_query(f"ALTER TABLE leads ADD COLUMN {col} TEXT")
+
+        # Rename emails table to messages (more generic)
+        if 'emails' in table_names and not self.column_exists('sqlite_master', 'name') == 'messages':
+            self.execute_query('ALTER TABLE emails RENAME TO messages')
+        elif not self.column_exists('sqlite_master', 'name') == 'messages':
+            # Create messages table if it doesn't exist
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS messages (
+                        message_id TEXT PRIMARY KEY,
+                        lead_id TEXT NOT NULL,
+                        campaign_id TEXT NOT NULL,
+                        user_id TEXT NOT NULL,
+                        channel TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        sent_at TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        error_message TEXT,
+                        read_at TEXT,
+                        replied_at TEXT,
+                        FOREIGN KEY (lead_id) REFERENCES leads (lead_id)
+                    )
+                ''')
 
     def init_db(self):
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            
+            # Users table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id TEXT PRIMARY KEY,
@@ -237,10 +318,18 @@ class Database:
                     email_host TEXT DEFAULT 'smtp.gmail.com',
                     email_user TEXT,
                     email_password TEXT,
-                    apify_api_token TEXT,
+                    google_places_api_key TEXT,
+                    twilio_account_sid TEXT,
+                    twilio_auth_token TEXT,
+                    twilio_whatsapp_number TEXT,
+                    facebook_page_id TEXT,
+                    facebook_page_token TEXT,
+                    sender_name TEXT,
                     created_at TEXT NOT NULL
                 )
             ''')
+            
+            # Campaigns table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS campaigns (
                     campaign_id TEXT PRIMARY KEY,
@@ -252,6 +341,8 @@ class Database:
                     FOREIGN KEY (user_id) REFERENCES users (user_id)
                 )
             ''')
+            
+            # Leads table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS leads (
                     lead_id TEXT PRIMARY KEY,
@@ -260,6 +351,9 @@ class Database:
                     name TEXT NOT NULL,
                     company TEXT,
                     email TEXT,
+                    phone TEXT,
+                    facebook_url TEXT,
+                    facebook_id TEXT,
                     website TEXT,
                     industry TEXT,
                     location TEXT,
@@ -268,30 +362,40 @@ class Database:
                     notes TEXT,
                     status TEXT NOT NULL,
                     qualification_score INTEGER DEFAULT 0,
-                    email_status TEXT DEFAULT 'pending',
-                    email_sent_at TEXT,
+                    preferred_channel TEXT DEFAULT 'email',
+                    last_contacted TEXT,
+                    contact_attempts INTEGER DEFAULT 0,
                     linkedin_url TEXT,
                     linkedin_profile TEXT,
                     source TEXT DEFAULT 'manual',
                     job_title TEXT,
-                    phone TEXT,
+                    place_id TEXT,
+                    rating REAL DEFAULT 0,
+                    total_ratings INTEGER DEFAULT 0,
+                    price_level INTEGER DEFAULT 0,
+                    business_status TEXT,
+                    types TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY (campaign_id) REFERENCES campaigns (campaign_id),
                     FOREIGN KEY (user_id) REFERENCES users (user_id)
                 )
             ''')
+            
+            # Messages table (replaces emails)
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS emails (
-                    email_id TEXT PRIMARY KEY,
+                CREATE TABLE IF NOT EXISTS messages (
+                    message_id TEXT PRIMARY KEY,
                     lead_id TEXT NOT NULL,
                     campaign_id TEXT NOT NULL,
                     user_id TEXT NOT NULL,
-                    subject TEXT NOT NULL,
-                    body TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    content TEXT NOT NULL,
                     sent_at TEXT NOT NULL,
                     status TEXT NOT NULL,
                     error_message TEXT,
+                    read_at TEXT,
+                    replied_at TEXT,
                     FOREIGN KEY (lead_id) REFERENCES leads (lead_id)
                 )
             ''')
@@ -302,11 +406,22 @@ class Database:
 
     def create_user(self, user: User):
         self.execute_insert('''
-            INSERT INTO users (user_id, username, password_hash, email, email_host, email_user, email_password,
-                               apify_api_token, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (user.user_id, user.username, user.password_hash, user.email, user.email_host,
-              user.email_user or '', user.email_password or '', user.apify_api_token or '', user.created_at))
+            INSERT INTO users (
+                user_id, username, password_hash, email, 
+                email_host, email_user, email_password,
+                google_places_api_key,
+                twilio_account_sid, twilio_auth_token, twilio_whatsapp_number,
+                facebook_page_id, facebook_page_token,
+                sender_name, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            user.user_id, user.username, user.password_hash, user.email,
+            user.email_host, user.email_user or '', user.email_password or '',
+            user.google_places_api_key or '',
+            user.twilio_account_sid or '', user.twilio_auth_token or '', user.twilio_whatsapp_number or '',
+            user.facebook_page_id or '', user.facebook_page_token or '',
+            user.sender_name or '', user.created_at
+        ))
 
     def get_user_by_username(self, username: str) -> Optional[User]:
         row = self.execute_query('SELECT * FROM users WHERE username = ?', (username,))
@@ -322,13 +437,15 @@ class Database:
             return User(**filtered)
         return None
 
-    def update_user_email_settings(self, user_id: str, email_host: str, email_user: str, email_password: str):
-        self.execute_update('UPDATE users SET email_host = ?, email_user = ?, email_password = ? WHERE user_id = ?',
-                            (email_host, email_user, email_password, user_id))
-
-    def update_user_apify_token(self, user_id: str, api_token: str):
-        self.execute_update('UPDATE users SET apify_api_token = ? WHERE user_id = ?',
-                            (api_token, user_id))
+    def update_user(self, user_id: str, **kwargs):
+        sets = []
+        values = []
+        for key, value in kwargs.items():
+            sets.append(f"{key} = ?")
+            values.append(value)
+        values.append(user_id)
+        query = f"UPDATE users SET {', '.join(sets)} WHERE user_id = ?"
+        self.execute_update(query, tuple(values))
 
     def get_user_campaigns(self, user_id: str) -> List[Campaign]:
         rows = self.execute_query('SELECT config FROM campaigns WHERE user_id = ?', (user_id,))
@@ -364,7 +481,7 @@ class Database:
     def delete_campaign(self, campaign_id: str):
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('DELETE FROM emails WHERE campaign_id = ?', (campaign_id,))
+            cursor.execute('DELETE FROM messages WHERE campaign_id = ?', (campaign_id,))
             cursor.execute('DELETE FROM leads WHERE campaign_id = ?', (campaign_id,))
             cursor.execute('DELETE FROM campaigns WHERE campaign_id = ?', (campaign_id,))
 
@@ -374,20 +491,23 @@ class Database:
             for lead in leads:
                 cursor.execute('''
                     INSERT OR REPLACE INTO leads (
-                        lead_id, campaign_id, user_id, name, company, email, website,
-                        industry, location, country, timezone, notes, status,
-                        qualification_score, email_status, email_sent_at,
-                        linkedin_url, linkedin_profile, source, job_title, phone,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        lead_id, campaign_id, user_id, name, company, email, phone,
+                        facebook_url, facebook_id, website, industry, location, country,
+                        timezone, notes, status, qualification_score, preferred_channel,
+                        last_contacted, contact_attempts, linkedin_url, linkedin_profile,
+                        source, job_title, place_id, rating, total_ratings, price_level,
+                        business_status, types, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     lead.lead_id, campaign_id, user_id, lead.name, lead.company,
-                    lead.email, lead.website, lead.industry, lead.location, lead.country, lead.timezone,
-                    lead.notes, lead.status, lead.qualification_score,
-                    lead.email_status, lead.email_sent_at,
+                    lead.email, lead.phone, lead.facebook_url, lead.facebook_id,
+                    lead.website, lead.industry, lead.location, lead.country,
+                    lead.timezone, lead.notes, lead.status, lead.qualification_score,
+                    lead.preferred_channel, lead.last_contacted, lead.contact_attempts,
                     lead.linkedin_url, json.dumps(lead.linkedin_profile) if lead.linkedin_profile else None,
-                    lead.source, lead.job_title, lead.phone,
-                    lead.created_at, lead.updated_at
+                    lead.source, lead.job_title, lead.place_id, lead.rating,
+                    lead.total_ratings, lead.price_level, lead.business_status,
+                    lead.types, lead.created_at, lead.updated_at
                 ))
 
     def get_campaign_leads(self, user_id: str, campaign_id: str) -> List[Lead]:
@@ -402,13 +522,23 @@ class Database:
             leads.append(lead)
         return leads
 
-    def get_leads_with_email(self, user_id: str, campaign_id: str, limit: int = 50) -> List[Lead]:
-        rows = self.execute_query('''
+    def get_leads_by_channel(self, user_id: str, campaign_id: str, channel: str, limit: int = 50) -> List[Lead]:
+        """Get leads that have contact info for a specific channel"""
+        if channel == ChannelType.EMAIL.value:
+            condition = "email IS NOT NULL AND email != '' AND email != 'null' AND email != 'None'"
+        elif channel == ChannelType.WHATSAPP.value:
+            condition = "phone IS NOT NULL AND phone != '' AND phone != 'null' AND phone != 'None'"
+        elif channel == ChannelType.FACEBOOK.value:
+            condition = "(facebook_url IS NOT NULL AND facebook_url != '') OR (facebook_id IS NOT NULL AND facebook_id != '')"
+        else:
+            return []
+        
+        rows = self.execute_query(f'''
             SELECT * FROM leads
-            WHERE campaign_id = ? AND user_id = ?
-            AND email IS NOT NULL AND email != '' AND email != 'null' AND email != 'None'
+            WHERE campaign_id = ? AND user_id = ? AND {condition}
             ORDER BY created_at ASC LIMIT ?
         ''', (campaign_id, user_id, limit))
+        
         leads = []
         for r in rows:
             filtered = self._filter_to_dataclass(Lead, r)
@@ -421,19 +551,23 @@ class Database:
     def update_lead(self, lead: Lead):
         lead.updated_at = datetime.datetime.now().isoformat()
         self.execute_update('''
-            UPDATE leads SET status = ?, qualification_score = ?,
-                email_status = ?, email_sent_at = ?,
-                country = ?, timezone = ?,
-                linkedin_url = ?, linkedin_profile = ?, source = ?, job_title = ?, phone = ?,
+            UPDATE leads SET 
+                status = ?, qualification_score = ?, preferred_channel = ?,
+                last_contacted = ?, contact_attempts = ?,
+                country = ?, timezone = ?, linkedin_url = ?, linkedin_profile = ?,
+                source = ?, job_title = ?, phone = ?, facebook_url = ?, facebook_id = ?,
+                rating = ?, total_ratings = ?, price_level = ?, business_status = ?, types = ?,
                 updated_at = ?
             WHERE lead_id = ?
-        ''', (lead.status, lead.qualification_score,
-              lead.email_status, lead.email_sent_at,
-              lead.country, lead.timezone,
-              lead.linkedin_url,
-              json.dumps(lead.linkedin_profile) if lead.linkedin_profile else None,
-              lead.source, lead.job_title, lead.phone,
-              lead.updated_at, lead.lead_id))
+        ''', (
+            lead.status, lead.qualification_score, lead.preferred_channel,
+            lead.last_contacted, lead.contact_attempts,
+            lead.country, lead.timezone, lead.linkedin_url,
+            json.dumps(lead.linkedin_profile) if lead.linkedin_profile else None,
+            lead.source, lead.job_title, lead.phone, lead.facebook_url, lead.facebook_id,
+            lead.rating, lead.total_ratings, lead.price_level, lead.business_status, lead.types,
+            lead.updated_at, lead.lead_id
+        ))
 
     def get_lead(self, lead_id: str) -> Optional[Lead]:
         r = self.execute_query('SELECT * FROM leads WHERE lead_id = ?', (lead_id,))
@@ -445,292 +579,218 @@ class Database:
             return lead
         return None
 
-    def save_email(self, user_id: str, email: EmailRecord):
-        email.user_id = user_id
+    def save_message(self, user_id: str, message: MessageRecord):
+        message.user_id = user_id
         self.execute_insert('''
-            INSERT INTO emails (email_id, lead_id, campaign_id, user_id, subject, body, sent_at, status, error_message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (email.email_id, email.lead_id, email.campaign_id, user_id, email.subject, email.body,
-              email.sent_at, email.status, email.error_message))
+            INSERT INTO messages (
+                message_id, lead_id, campaign_id, user_id, channel,
+                content, sent_at, status, error_message, read_at, replied_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            message.message_id, message.lead_id, message.campaign_id, user_id,
+            message.channel, message.content, message.sent_at, message.status,
+            message.error_message, message.read_at, message.replied_at
+        ))
 
-    def get_lead_emails(self, lead_id: str) -> List[EmailRecord]:
-        rows = self.execute_query('SELECT * FROM emails WHERE lead_id = ? ORDER BY sent_at DESC', (lead_id,))
-        emails = []
+    def get_lead_messages(self, lead_id: str) -> List[MessageRecord]:
+        rows = self.execute_query('SELECT * FROM messages WHERE lead_id = ? ORDER BY sent_at DESC', (lead_id,))
+        messages = []
         for r in rows:
-            filtered = self._filter_to_dataclass(EmailRecord, r)
-            emails.append(EmailRecord(**filtered))
-        return emails
+            filtered = self._filter_to_dataclass(MessageRecord, r)
+            messages.append(MessageRecord(**filtered))
+        return messages
+
+    def update_message_status(self, message_id: str, status: str, **kwargs):
+        sets = ["status = ?"]
+        values = [status]
+        for key, value in kwargs.items():
+            sets.append(f"{key} = ?")
+            values.append(value)
+        values.append(message_id)
+        query = f"UPDATE messages SET {', '.join(sets)} WHERE message_id = ?"
+        self.execute_update(query, tuple(values))
 
 # ============================================================================
-# APIFY DISCOVERY (Multiple Sources) - FIXED VERSION
+# GOOGLE PLACES API DISCOVERY
 # ============================================================================
 
-class ApifyDiscovery:
-    """Lead discovery using various Apify actors (LinkedIn Company Employees, Google Maps, etc.)"""
-
-    def __init__(self, api_token=None):
-        self.api_token = api_token
-        self.client = ApifyClient(api_token) if api_token and APIFY_AVAILABLE else None
-        self.authenticated = bool(api_token and APIFY_AVAILABLE and self.client)
-
-    def set_api_token(self, api_token):
-        self.api_token = api_token
-        self.client = ApifyClient(api_token) if api_token and APIFY_AVAILABLE else None
-        self.authenticated = bool(api_token and APIFY_AVAILABLE and self.client)
-
-    def authenticate(self):
-        return self.authenticated
-
-    def search_linkedin_people(self, company_name: str, job_titles: List[str] = None, max_results: int = 10) -> List[Dict]:
-        """
-        Search for people at a specific company using HarvestAPI's LinkedIn Company Employees Scraper.
-        Actor: harvestapi/linkedin-company-employees
-        """
-        if not self.authenticated or not self.client:
-            print("❌ Apify not configured")
+class GooglePlacesDiscovery:
+    """Lead discovery using Google Places API"""
+    
+    BASE_URL = "https://maps.googleapis.com/maps/api/place"
+    
+    def __init__(self, api_key=None):
+        self.api_key = api_key
+        self.authenticated = bool(api_key)
+    
+    def set_api_key(self, api_key):
+        self.api_key = api_key
+        self.authenticated = bool(api_key)
+    
+    def search_places(self, query: str, location: str = "", max_results: int = 20) -> List[Dict]:
+        """Search for businesses using Google Places API"""
+        if not self.authenticated or not self.api_key:
+            print("❌ Google Places API key not configured")
             return []
-
-        leads = []
+        
+        businesses = []
+        
         try:
-            print(f"🔍 Apify: Searching for employees at {company_name}")
-
-            # The actor expects a list of company URLs or names
-            run_input = {
-                "companyUrls": [company_name],  # Can be company name or LinkedIn company URL
-                "maxEmployees": max_results,
-                "profileScraperMode": "short"  # Use 'short' mode for basic data (cheaper)
+            print(f"🔍 Google Places: Searching for '{query}' in '{location or 'any'}'")
+            
+            # Text Search to find places
+            search_url = f"{self.BASE_URL}/textsearch/json"
+            search_text = f"{query} in {location}" if location else query
+            
+            params = {
+                'query': search_text,
+                'key': self.api_key,
+                'maxresults': min(max_results, 20)
             }
-
-            print(f"🚀 Calling Apify actor: harvestapi/linkedin-company-employees")
-            run = self.client.actor("harvestapi/linkedin-company-employees").call(run_input=run_input)
-
-            if run and run.get("defaultDatasetId"):
-                dataset = self.client.dataset(run["defaultDatasetId"])
-                count = 0
-                for item in dataset.iterate_items():
-                    # Extract data from the harvestapi response format
-                    lead = {
-                        'name': item.get('fullName', '').strip(),
-                        'company': company_name,
-                        'job_title': item.get('headline', ''),
-                        'linkedin_url': item.get('profileUrl', ''),
-                        'location': item.get('location', ''),
-                        'country': self._extract_country(item.get('location', '')),
-                        'email': '',  # Email search requires paid mode
-                        'phone': '',
-                        'industry': '',
-                        'source': LeadSource.APIFY_LINKEDIN.value
-                    }
-                    leads.append(lead)
-                    count += 1
-                    if count >= max_results:
-                        break
-                print(f"✅ Apify: Found {len(leads)} employees at {company_name}")
-            else:
-                print(f"⚠️ Apify: No results for {company_name}")
-
-        except Exception as e:
-            print(f"❌ Apify LinkedIn error: {e}")
-            import traceback
-            traceback.print_exc()
-
-        return leads
-
-    def search_google_maps(self, search_term: str, location: str = "", max_results: int = 20) -> List[Dict]:
-        """
-        Search for businesses on Google Maps using Compass's Google Places Scraper.
-        Actor: compass/crawler-google-places
-        """
-        if not self.authenticated or not self.client:
-            print("❌ Apify not configured")
-            return []
-
-        leads = []
-        try:
-            print(f"🔍 Apify: Searching Google Maps for '{search_term}' in '{location or 'any'}'")
-
-            # Build the search query
-            if location:
-                search_query = f"{search_term} in {location}"
-            else:
-                search_query = search_term
-
-            run_input = {
-                "searchStringsArray": [search_query],
-                "maxCrawledPlacesPerSearch": max_results,
-                "language": "en",
-                "deeperCityScrape": False,
-                "scrapeReviewerName": False,
-                "scrapeReviewerUrl": False,
-                "scrapeReviewId": False,
-                "scrapeReviewUrl": False,
-                "scrapeResponseFromOwnerText": False,
-            }
-
-            print(f"🚀 Calling Apify actor: compass/crawler-google-places")
-            run = self.client.actor("compass/crawler-google-places").call(run_input=run_input)
-
-            if run and run.get("defaultDatasetId"):
-                dataset = self.client.dataset(run["defaultDatasetId"])
-                count = 0
-                for item in dataset.iterate_items():
-                    lead = {
-                        'name': item.get('title', ''),
-                        'company': item.get('title', ''),
-                        'job_title': '',
-                        'linkedin_url': '',
-                        'location': item.get('address', ''),
-                        'country': item.get('addressCountry', ''),
-                        'email': '',
-                        'phone': item.get('phone', ''),
-                        'website': item.get('website', ''),
-                        'industry': search_term,
-                        'source': LeadSource.APIFY_GOOGLE_MAPS.value
-                    }
-                    leads.append(lead)
-                    count += 1
-                    if count >= max_results:
-                        break
-                print(f"✅ Apify: Found {len(leads)} businesses on Google Maps")
-            else:
-                print("⚠️ Apify: No Google Maps results")
-
-        except Exception as e:
-            print(f"❌ Apify Google Maps error: {e}")
-            import traceback
-            traceback.print_exc()
-
-        return leads
-
-    def _extract_country(self, location: str) -> str:
-        if not location:
-            return ''
-        parts = location.split(',')
-        return parts[-1].strip() if len(parts) > 1 else ''
-
-# ============================================================================
-# BUSINESS DISCOVERY (Combines multiple Apify sources)
-# ============================================================================
-
-class BusinessDiscovery:
-    def __init__(self):
-        pass  # Apify client will be created per user with their token
-
-    def _get_search_terms_for_industry(self, industry: str) -> List[str]:
-        """Generate search terms for an industry (used in Google Maps)."""
-        base_terms = [industry]
-        if industry.lower() == 'saas':
-            base_terms.extend(['software company', 'cloud software', 'saas company'])
-        elif industry.lower() == 'fintech':
-            base_terms.extend(['financial technology', 'finance company', 'banking software'])
-        elif industry.lower() == 'e-commerce':
-            base_terms.extend(['online store', 'ecommerce', 'retail website'])
-        elif industry.lower() == 'marketing':
-            base_terms.extend(['marketing agency', 'digital marketing', 'advertising firm'])
-        return base_terms[:2]
-
-    def _get_companies_for_industry(self, industry: str, limit: int = 5) -> List[str]:
-        """Get sample company names for LinkedIn search."""
-        industry_companies = {
-            'saas': ['Salesforce', 'HubSpot', 'Zoom', 'Slack', 'Atlassian'],
-            'fintech': ['Stripe', 'Square', 'PayPal', 'Robinhood', 'Revolut'],
-            'e-commerce': ['Shopify', 'Amazon', 'eBay', 'Etsy', 'WooCommerce'],
-            'healthtech': ['Cerner', 'Epic', 'Teladoc', 'Flatiron', 'Oscar'],
-            'marketing': ['Mailchimp', 'Marketo', 'HubSpot', 'Salesforce', 'ActiveCampaign'],
-            'technology': ['Microsoft', 'Google', 'Apple', 'Amazon', 'Meta'],
-            'consulting': ['McKinsey', 'BCG', 'Deloitte', 'PwC', 'Accenture'],
-        }
-        defaults = ['TechCorp', 'InnovateInc', 'SolutionsLLC', 'GlobalEnterprises', 'NextGen']
-        return industry_companies.get(industry.lower(), defaults)[:limit]
-
-    def discover_businesses(self, campaign: Campaign, user_apify_token: str = None, max_businesses: int = 50) -> List[Dict]:
-        if not campaign.ideal_industries:
-            return []
-
-        if not user_apify_token or not APIFY_AVAILABLE:
-            print("❌ Apify token missing or client not available")
-            return []
-
-        all_businesses = []
-
-        try:
-            apify = ApifyDiscovery(user_apify_token)
-            if not apify.authenticate():
-                print("❌ Apify authentication failed")
+            
+            response = requests.get(search_url, params=params)
+            data = response.json()
+            
+            if data.get('status') != 'OK' and data.get('status') != 'ZERO_RESULTS':
+                print(f"⚠️ Google Places API error: {data.get('status')}")
                 return []
-
-            # --- LinkedIn Search (reduced to avoid rate limits) ---
-            for industry in campaign.ideal_industries[:1]:  # Only search first industry
-                companies = self._get_companies_for_industry(industry, limit=2)  # Limit to 2 companies
-                print(f"🔍 LinkedIn: Searching {industry} companies: {companies}")
-                for company in companies:
-                    leads = apify.search_linkedin_people(
-                        company,
-                        job_titles=campaign.ideal_job_titles,
-                        max_results=max_businesses // 4  # Reduce per-company results
-                    )
-                    all_businesses.extend(leads)
-                    time.sleep(2)  # Add delay between requests
-
-            # --- Google Maps Search ---
-            for industry in campaign.ideal_industries[:2]:
-                search_terms = self._get_search_terms_for_industry(industry)
-                locations = campaign.ideal_locations if campaign.ideal_locations else ['']
-                for term in search_terms[:1]:  # Limit to 1 search term per industry
-                    for loc in locations[:2]:
-                        if not loc and not campaign.search_globally:
-                            continue
-                        if not loc:
-                            loc = "United States"
-                        leads = apify.search_google_maps(
-                            search_term=term,
-                            location=loc,
-                            max_results=max_businesses // 4
-                        )
-                        all_businesses.extend(leads)
-                        time.sleep(2)  # Add delay between requests
-
+            
+            places = data.get('results', [])
+            print(f"✅ Found {len(places)} places in initial search")
+            
+            # Get details for each place
+            for place in places[:max_results]:
+                place_id = place.get('place_id')
+                if not place_id:
+                    continue
+                
+                # Get place details
+                details_url = f"{self.BASE_URL}/details/json"
+                details_params = {
+                    'place_id': place_id,
+                    'fields': 'name,formatted_address,formatted_phone_number,website,rating,user_ratings_total,price_level,business_status,types,url',
+                    'key': self.api_key
+                }
+                
+                details_response = requests.get(details_url, params=details_params)
+                details_data = details_response.json()
+                
+                if details_data.get('status') == 'OK':
+                    result = details_data.get('result', {})
+                    
+                    # Extract location components
+                    address = result.get('formatted_address', '')
+                    country = self._extract_country(address)
+                    
+                    # Get business types
+                    types = result.get('types', [])
+                    primary_type = self._get_primary_business_type(types)
+                    
+                    # Try to find Facebook URL from website (if any)
+                    facebook_url = self._find_facebook_url(result.get('website', ''))
+                    
+                    business = {
+                        'name': result.get('name', place.get('name', '')),
+                        'company': result.get('name', place.get('name', '')),
+                        'address': address,
+                        'location': address,
+                        'country': country,
+                        'phone': self._format_phone_for_whatsapp(result.get('formatted_phone_number', '')),
+                        'website': result.get('website', ''),
+                        'email': '',  # Email not available from Places API
+                        'facebook_url': facebook_url,
+                        'industry': primary_type,
+                        'place_id': place_id,
+                        'rating': result.get('rating', 0),
+                        'total_ratings': result.get('user_ratings_total', 0),
+                        'price_level': result.get('price_level', 0),
+                        'business_status': result.get('business_status', ''),
+                        'types': ','.join(types[:5]),
+                        'google_maps_url': result.get('url', ''),
+                        'source': LeadSource.GOOGLE_PLACES.value
+                    }
+                    
+                    businesses.append(business)
+                    time.sleep(0.1)
+            
+            print(f"✅ Google Places: Found {len(businesses)} businesses with details")
+            
         except Exception as e:
-            print(f"❌ Discovery error: {e}")
+            print(f"❌ Google Places API error: {e}")
             import traceback
             traceback.print_exc()
-
-        # Deduplicate by (name, company)
-        seen = set()
-        unique = []
-        for b in all_businesses:
-            key = f"{b.get('name')}_{b.get('company')}"
-            if key not in seen:
-                seen.add(key)
-                unique.append(b)
-
-        print(f"✅ Total unique leads found: {len(unique)}")
-        return unique[:max_businesses]
+        
+        return businesses
+    
+    def _format_phone_for_whatsapp(self, phone: str) -> str:
+        """Format phone number for WhatsApp (remove non-digits)"""
+        if not phone:
+            return ''
+        # Extract digits only
+        digits = re.sub(r'\D', '', phone)
+        # Add country code if missing (assuming US/CA for now)
+        if len(digits) == 10:
+            digits = '1' + digits
+        return digits
+    
+    def _find_facebook_url(self, website: str) -> str:
+        """Try to find Facebook URL from website"""
+        if not website:
+            return ''
+        
+        # If the website itself is Facebook
+        if 'facebook.com' in website.lower():
+            return website
+        
+        # In a real implementation, you might scrape the website or use other APIs
+        # For now, return empty
+        return ''
+    
+    def _extract_country(self, address: str) -> str:
+        """Extract country from address string"""
+        if not address:
+            return ''
+        parts = address.split(',')
+        return parts[-1].strip() if len(parts) > 1 else ''
+    
+    def _get_primary_business_type(self, types: List[str]) -> str:
+        """Get the primary business type from types list"""
+        exclude = ['establishment', 'point_of_interest', 'food', 'store']
+        for t in types:
+            if t not in exclude and '_' not in t:
+                return t.replace('_', ' ').title()
+        return types[0].replace('_', ' ').title() if types else 'Business'
 
 # ============================================================================
-# EMAIL SERVICE
+# MESSAGE SERVICE (Multi-channel)
 # ============================================================================
 
-class EmailService:
+class MessageService:
     def __init__(self):
+        # Email settings
         self.smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
         self.smtp_user = os.getenv("SMTP_USER", "")
         self.smtp_password = os.getenv("SMTP_PASSWORD", "")
+        
+        # Simulation mode
         self.simulation_mode = not all([self.smtp_user, self.smtp_password])
         if self.simulation_mode:
-            print("⚠️ Email simulation mode (no real emails sent)")
-
+            print("⚠️ Message simulation mode (no real messages sent)")
+    
     def send_email(self, to_email: str, subject: str, body: str, from_name: str = "Copywriter Pro") -> bool:
+        """Send email via SMTP"""
         if self.simulation_mode:
-            print(f"[SIMULATED] To: {to_email} | Subject: {subject}")
+            print(f"[SIMULATED EMAIL] To: {to_email} | Subject: {subject}")
             return True
+        
         try:
             msg = MIMEMultipart()
             msg['From'] = f"{from_name} <{self.smtp_user}>"
             msg['To'] = to_email
             msg['Subject'] = subject
             msg.attach(MIMEText(body, 'plain'))
+            
             server = smtplib.SMTP(self.smtp_host, self.smtp_port)
             server.starttls()
             server.login(self.smtp_user, self.smtp_password)
@@ -740,28 +800,307 @@ class EmailService:
         except Exception as e:
             print(f"❌ Email failed: {e}")
             return False
-
-    def send_campaign_email(self, lead: Lead, campaign: Campaign) -> EmailRecord:
-        email_id = f"email_{int(time.time())}_{lead.lead_id}"
+    
+    def send_whatsapp(self, to_phone: str, message: str, twilio_settings: Dict = None) -> bool:
+        """
+        Send WhatsApp message via Twilio
+        
+        Args:
+            to_phone: Phone number with country code (e.g., 1234567890)
+            message: Message content
+            twilio_settings: Dict with account_sid, auth_token, from_number
+        """
+        if self.simulation_mode or not twilio_settings:
+            print(f"[SIMULATED WHATSAPP] To: {to_phone} | Message: {message[:50]}...")
+            return True
+        
+        try:
+            # This requires the twilio package: pip install twilio
+            from twilio.rest import Client
+            
+            account_sid = twilio_settings.get('account_sid')
+            auth_token = twilio_settings.get('auth_token')
+            from_number = twilio_settings.get('from_number')  # Format: whatsapp:+14155238886
+            
+            if not all([account_sid, auth_token, from_number]):
+                print("❌ Twilio settings incomplete")
+                return False
+            
+            client = Client(account_sid, auth_token)
+            
+            # Format to number for WhatsApp
+            to_whatsapp = f"whatsapp:+{to_phone}"
+            
+            message_obj = client.messages.create(
+                body=message,
+                from_=from_number,
+                to=to_whatsapp
+            )
+            
+            return message_obj.sid is not None
+            
+        except ImportError:
+            print("❌ Twilio package not installed. Run: pip install twilio")
+            return False
+        except Exception as e:
+            print(f"❌ WhatsApp failed: {e}")
+            return False
+    
+    def send_facebook_message(self, recipient_id: str, message: str, page_token: str) -> bool:
+        """
+        Send Facebook Messenger message
+        
+        Args:
+            recipient_id: Facebook PSID or page-scoped ID
+            message: Message content
+            page_token: Facebook Page Access Token
+        """
+        if self.simulation_mode or not page_token:
+            print(f"[SIMULATED FACEBOOK] To: {recipient_id} | Message: {message[:50]}...")
+            return True
+        
+        try:
+            url = "https://graph.facebook.com/v18.0/me/messages"
+            payload = {
+                "recipient": {"id": recipient_id},
+                "message": {"text": message},
+                "access_token": page_token
+            }
+            
+            response = requests.post(url, json=payload)
+            data = response.json()
+            
+            return 'message_id' in data
+            
+        except Exception as e:
+            print(f"❌ Facebook Messenger failed: {e}")
+            return False
+    
+    def send_facebook_comment(self, post_id: str, message: str, page_token: str) -> bool:
+        """Reply to a Facebook post comment"""
+        try:
+            url = f"https://graph.facebook.com/v18.0/{post_id}/comments"
+            params = {
+                "message": message,
+                "access_token": page_token
+            }
+            
+            response = requests.post(url, params=params)
+            data = response.json()
+            
+            return 'id' in data
+            
+        except Exception as e:
+            print(f"❌ Facebook comment failed: {e}")
+            return False
+    
+    def generate_whatsapp_link(self, phone: str, message: str) -> str:
+        """Generate a WhatsApp click-to-chat link"""
+        # Clean phone number
+        phone = re.sub(r'\D', '', phone)
+        encoded_message = urllib.parse.quote(message)
+        return f"https://wa.me/{phone}?text={encoded_message}"
+    
+    def generate_messenger_link(self, facebook_username: str, message: str) -> str:
+        """Generate a Messenger link"""
+        encoded_message = urllib.parse.quote(message)
+        return f"https://m.me/{facebook_username}?text={encoded_message}"
+    
+    def send_campaign_message(self, lead: Lead, campaign: Campaign, channel: str, user_settings: User) -> Optional[MessageRecord]:
+        """Send a message via specified channel"""
+        
+        message_id = f"msg_{int(time.time())}_{lead.lead_id}_{channel}"
         timestamp = datetime.datetime.now().isoformat()
-        subject = campaign.email_subject.replace("[Name]", lead.name).replace("[Company]", lead.company)
-        body = campaign.email_body.replace("[Name]", lead.name).replace("[Company]", lead.company)
-        if lead.job_title:
-            body = body.replace("[Job Title]", lead.job_title)
-        if lead.industry:
-            body = body.replace("[Industry]", lead.industry)
-
-        success = self.send_email(lead.email, subject, body)
-        return EmailRecord(
-            email_id=email_id,
+        
+        # Prepare content based on channel
+        if channel == ChannelType.EMAIL.value:
+            content = campaign.email_body
+            subject = campaign.email_subject
+            
+            # Replace placeholders
+            content = content.replace("[Name]", lead.name)
+            content = content.replace("[Company]", lead.company)
+            content = content.replace("[Industry]", lead.industry or "")
+            content = content.replace("[Location]", lead.location or "")
+            content = content.replace("[Rating]", str(lead.rating) if lead.rating > 0 else "")
+            
+            subject = subject.replace("[Name]", lead.name)
+            subject = subject.replace("[Company]", lead.company)
+            
+            # For email, combine subject and body
+            full_content = f"Subject: {subject}\n\n{content}"
+            
+            # Send email
+            success = self.send_email(
+                lead.email, 
+                subject, 
+                content, 
+                from_name=user_settings.sender_name or "Copywriter Pro"
+            )
+            
+        elif channel == ChannelType.WHATSAPP.value:
+            content = campaign.whatsapp_template
+            
+            # Replace placeholders
+            content = content.replace("[Name]", lead.name.split()[0])  # First name only
+            content = content.replace("[Company]", lead.company)
+            content = content.replace("[Industry]", lead.industry or "")
+            
+            full_content = content
+            
+            # Prepare Twilio settings
+            twilio_settings = {
+                'account_sid': user_settings.twilio_account_sid,
+                'auth_token': user_settings.twilio_auth_token,
+                'from_number': user_settings.twilio_whatsapp_number
+            }
+            
+            # Send WhatsApp
+            success = self.send_whatsapp(lead.phone, content, twilio_settings)
+            
+        elif channel == ChannelType.FACEBOOK.value:
+            content = campaign.facebook_template
+            
+            # Replace placeholders
+            content = content.replace("[Name]", lead.name.split()[0])
+            content = content.replace("[Company]", lead.company)
+            content = content.replace("[Industry]", lead.industry or "")
+            
+            full_content = content
+            
+            # Determine recipient ID
+            recipient_id = lead.facebook_id or lead.facebook_url.split('/')[-1] if lead.facebook_url else None
+            
+            if recipient_id:
+                success = self.send_facebook_message(
+                    recipient_id, 
+                    content, 
+                    user_settings.facebook_page_token
+                )
+            else:
+                print(f"❌ No Facebook recipient ID for lead {lead.lead_id}")
+                success = False
+        else:
+            return None
+        
+        # Create message record
+        message = MessageRecord(
+            message_id=message_id,
             lead_id=lead.lead_id,
             campaign_id=campaign.campaign_id,
             user_id=lead.user_id,
-            subject=subject,
-            body=body,
+            channel=channel,
+            content=full_content,
             sent_at=timestamp,
-            status=EmailStatus.SENT.value if success else EmailStatus.FAILED.value,
-            error_message=None if success else "Failed to send"
+            status=MessageStatus.SENT.value if success else MessageStatus.FAILED.value,
+            error_message=None if success else f"Failed to send via {channel}"
+        )
+        
+        # Update lead's last contacted
+        if success:
+            lead.last_contacted = timestamp
+            lead.contact_attempts += 1
+            lead.preferred_channel = channel  # Set as preferred if successful
+        
+        return message
+
+# ============================================================================
+# BUSINESS DISCOVERY
+# ============================================================================
+
+class BusinessDiscovery:
+    def __init__(self):
+        self.google_places = None
+    
+    def _init_google_places(self, api_key: str):
+        if not self.google_places:
+            self.google_places = GooglePlacesDiscovery(api_key)
+        else:
+            self.google_places.set_api_key(api_key)
+        return self.google_places.authenticated
+    
+    def discover_businesses(self, campaign: Campaign, user_api_key: str = None, max_businesses: int = 50) -> List[Dict]:
+        """Discover businesses using Google Places API"""
+        if not campaign.search_queries:
+            print("❌ No search queries defined")
+            return []
+        
+        if not user_api_key:
+            print("❌ Google Places API key missing")
+            return []
+        
+        if not self._init_google_places(user_api_key):
+            print("❌ Google Places API authentication failed")
+            return []
+        
+        all_businesses = []
+        seen_place_ids = set()
+        
+        try:
+            for query in campaign.search_queries[:3]:
+                locations = campaign.search_locations if campaign.search_locations else ['']
+                
+                for location in locations[:3]:
+                    if not location and not query:
+                        continue
+                    
+                    print(f"\n🔍 Searching: '{query}' in '{location or 'any location'}'")
+                    
+                    remaining = max_businesses - len(all_businesses)
+                    if remaining <= 0:
+                        break
+                    
+                    per_search = min(
+                        campaign.max_results_per_search or 20,
+                        remaining,
+                        20
+                    )
+                    
+                    businesses = self.google_places.search_places(
+                        query=query,
+                        location=location,
+                        max_results=per_search
+                    )
+                    
+                    for biz in businesses:
+                        place_id = biz.get('place_id')
+                        if place_id and place_id not in seen_place_ids:
+                            seen_place_ids.add(place_id)
+                            
+                            if campaign.min_rating > 0 and biz.get('rating', 0) < campaign.min_rating:
+                                continue
+                            
+                            if not biz.get('industry'):
+                                biz['industry'] = query
+                            
+                            all_businesses.append(biz)
+                            
+                            if len(all_businesses) >= max_businesses:
+                                break
+                    
+                    time.sleep(1)
+                    
+                if len(all_businesses) >= max_businesses:
+                    break
+            
+            print(f"\n✅ Total unique businesses found: {len(all_businesses)}")
+            
+        except Exception as e:
+            print(f"❌ Discovery error: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        return all_businesses[:max_businesses]
+    
+    def quick_search(self, query: str, location: str, api_key: str, max_results: int = 20) -> List[Dict]:
+        """Quick one-off search"""
+        if not self._init_google_places(api_key):
+            return []
+        
+        return self.google_places.search_places(
+            query=query,
+            location=location,
+            max_results=max_results
         )
 
 # ============================================================================
@@ -775,6 +1114,9 @@ class LeadProcessor:
         reader = csv.DictReader(content.splitlines())
         for i, row in enumerate(reader):
             email = row.get('email', row.get('Email', '') or '').strip().lower()
+            phone = row.get('phone', row.get('Phone', row.get('whatsapp', '')) or '').strip()
+            phone = re.sub(r'\D', '', phone)  # Clean phone number
+            
             lead = Lead(
                 lead_id=f"lead_{int(time.time())}_{i}_{random.randint(1000,9999)}",
                 campaign_id=campaign_id,
@@ -782,6 +1124,8 @@ class LeadProcessor:
                 name=row.get('name', row.get('Name', 'Unknown')) or 'Unknown',
                 company=row.get('company', row.get('Company', '')) or '',
                 email=email,
+                phone=phone,
+                facebook_url=row.get('facebook', row.get('Facebook', '')) or '',
                 website=row.get('website', row.get('Website', '')) or '',
                 industry=row.get('industry', row.get('Industry', '')) or '',
                 location=row.get('location', row.get('Location', '')) or '',
@@ -790,10 +1134,8 @@ class LeadProcessor:
                 notes=row.get('notes', row.get('Notes', '')) or '',
                 linkedin_url=row.get('linkedin', row.get('LinkedIn', '')) or '',
                 job_title=row.get('job_title', row.get('Job Title', '')) or '',
-                phone=row.get('phone', row.get('Phone', '')) or '',
                 source=LeadSource.CSV.value,
                 status=LeadStatus.PENDING.value,
-                email_status=EmailStatus.PENDING.value if email and '@' in email else EmailStatus.FAILED.value,
                 created_at=datetime.datetime.now().isoformat(),
                 updated_at=datetime.datetime.now().isoformat()
             )
@@ -803,22 +1145,39 @@ class LeadProcessor:
     @staticmethod
     def score_lead(lead: Lead, campaign: Campaign) -> int:
         score = 0
-        if campaign.ideal_industries and lead.industry and lead.industry.lower() in [i.lower() for i in campaign.ideal_industries]:
-            score += 30
-        if campaign.ideal_job_titles and lead.job_title and any(t.lower() in lead.job_title.lower() for t in campaign.ideal_job_titles):
-            score += 20
-        if campaign.ideal_locations and lead.location and lead.location.lower() in [l.lower() for l in campaign.ideal_locations]:
-            score += 20
-        if campaign.ideal_countries and lead.country and lead.country.lower() in [c.lower() for c in campaign.ideal_countries]:
-            score += 20
-        if lead.email and '@' in lead.email:
+        
+        # Industry match
+        if campaign.ideal_industries and lead.industry:
+            if any(i.lower() in lead.industry.lower() for i in campaign.ideal_industries):
+                score += 30
+        
+        # Location match
+        if campaign.search_locations and lead.location:
+            if any(l.lower() in lead.location.lower() for l in campaign.search_locations):
+                score += 20
+        
+        # Rating score
+        if lead.rating >= 4.5:
             score += 25
-        if lead.website:
+        elif lead.rating >= 4.0:
             score += 15
-        if lead.linkedin_url:
+        elif lead.rating >= 3.5:
             score += 10
+        
+        # Contact availability
+        if lead.email:
+            score += 20
         if lead.phone:
-            score += 5
+            score += 15
+        if lead.facebook_url:
+            score += 10
+        if lead.website:
+            score += 10
+        
+        # Business status
+        if lead.business_status == 'OPERATIONAL':
+            score += 10
+        
         return min(100, score)
 
 # ============================================================================
@@ -831,30 +1190,66 @@ class AnalyticsEngine:
         campaign = db.get_campaign(campaign_id)
         if not campaign:
             return {}
+        
         leads = db.get_campaign_leads(user_id, campaign_id)
+        messages = []
+        for lead in leads:
+            messages.extend(db.get_lead_messages(lead.lead_id))
 
         total = len(leads)
-        sent = len([l for l in leads if l.email_status == EmailStatus.SENT.value])
+        
+        # Message stats by channel
+        channel_stats = {}
+        for channel in [c.value for c in ChannelType]:
+            channel_msgs = [m for m in messages if m.channel == channel]
+            channel_stats[channel] = {
+                'sent': len([m for m in channel_msgs if m.status == MessageStatus.SENT.value]),
+                'failed': len([m for m in channel_msgs if m.status == MessageStatus.FAILED.value]),
+                'read': len([m for m in channel_msgs if m.read_at]),
+                'replied': len([m for m in channel_msgs if m.replied_at])
+            }
+        
+        # Lead stats
         hot = len([l for l in leads if l.status == LeadStatus.QUALIFIED_HOT.value])
         cold = len([l for l in leads if l.status == LeadStatus.COLD.value])
+        
+        # Contact availability
+        with_email = len([l for l in leads if l.email])
         with_phone = len([l for l in leads if l.phone])
+        with_facebook = len([l for l in leads if l.facebook_url])
+        with_website = len([l for l in leads if l.website])
+        
+        # Average rating
+        avg_rating = 0
+        if leads:
+            ratings = [l.rating for l in leads if l.rating > 0]
+            avg_rating = sum(ratings) / len(ratings) if ratings else 0
 
+        # Country breakdown
         countries = {}
         for l in leads:
             if l.country:
                 countries[l.country] = countries.get(l.country, 0) + 1
-        country_str = "\n".join(f"{c}: {v}" for c, v in sorted(countries.items(), key=lambda x: x[1], reverse=True))
+        country_str = "\n".join(f"{c}: {v}" for c, v in sorted(countries.items(), key=lambda x: x[1], reverse=True)[:5])
 
         return {
             'campaign_name': campaign.name,
             'total_leads': total,
-            'emails_sent': sent,
             'hot_leads': hot,
             'cold_leads': cold,
-            'leads_with_phone': with_phone,
-            'conversion_rate': round(hot/total*100,1) if total else 0,
+            'avg_rating': round(avg_rating, 1),
             'countries_found': len(countries),
-            'country_breakdown': country_str
+            'country_breakdown': country_str,
+            'contact_availability': {
+                'email': with_email,
+                'phone': with_phone,
+                'facebook': with_facebook,
+                'website': with_website
+            },
+            'channel_stats': channel_stats,
+            'total_messages': len(messages),
+            'total_sent': sum(s['sent'] for s in channel_stats.values()),
+            'total_failed': sum(s['failed'] for s in channel_stats.values())
         }
 
 # ============================================================================
@@ -866,13 +1261,13 @@ app.secret_key = os.getenv("SECRET_KEY", secrets.token_hex(16))
 CORS(app)
 
 db = Database()
-email_service = EmailService()
+message_service = MessageService()
 business_discovery = BusinessDiscovery()
 analytics = AnalyticsEngine()
 
-# ----------------------------------------------------------------------------
-# AUTH
-# ----------------------------------------------------------------------------
+# ============================================================================
+# AUTH ROUTES
+# ============================================================================
 
 @app.route('/')
 def index():
@@ -920,127 +1315,158 @@ def logout():
     flash('Logged out', 'success')
     return redirect(url_for('index'))
 
-# ----------------------------------------------------------------------------
-# APIFY SETTINGS
-# ----------------------------------------------------------------------------
+# ============================================================================
+# SETTINGS ROUTES
+# ============================================================================
 
-@app.route('/settings/apify', methods=['GET', 'POST'])
-def apify_settings():
+@app.route('/settings/api', methods=['GET', 'POST'])
+def api_settings():
     if 'user_id' not in session:
         return redirect(url_for('index'))
 
     user = db.get_user(session['user_id'])
-    if not user:
-        session.clear()
-        flash('User not found. Please log in again.', 'error')
-        return redirect(url_for('index'))
-
     if request.method == 'POST':
-        apify_token = request.form.get('apify_api_token', '').strip()
-
-        if apify_token:
-            db.update_user_apify_token(user.user_id, apify_token)
-
-            if APIFY_AVAILABLE:
-                test_discovery = ApifyDiscovery(apify_token)
-                if test_discovery.authenticate():
-                    flash('Apify API token saved and verified!', 'success')
-                else:
-                    flash('Token saved but verification failed. Please check your token.', 'warning')
-            else:
-                flash('Token saved. Note: Apify client not installed on server.', 'info')
-        else:
-            flash('Please enter a valid API token', 'error')
-
+        api_key = request.form.get('google_places_api_key', '').strip()
+        if api_key:
+            db.update_user(user.user_id, google_places_api_key=api_key)
+            flash('Google Places API key saved!', 'success')
         return redirect(url_for('dashboard'))
 
-    return render_template('apify_settings.html', user=user)
-
-# ----------------------------------------------------------------------------
-# EMAIL SETTINGS
-# ----------------------------------------------------------------------------
+    return render_template('api_settings.html', user=user)
 
 @app.route('/settings/email', methods=['GET', 'POST'])
 def email_settings():
     if 'user_id' not in session:
         return redirect(url_for('index'))
+    
     user = db.get_user(session['user_id'])
-    if not user:
-        session.clear()
-        flash('User not found. Please log in again.', 'error')
-        return redirect(url_for('index'))
     if request.method == 'POST':
-        host = request.form.get('email_host', 'smtp.gmail.com')
-        user_email = request.form.get('email_user')
-        password = request.form.get('email_password')
-        db.update_user_email_settings(user.user_id, host, user_email, password)
+        db.update_user(
+            user.user_id,
+            email_host=request.form.get('email_host', 'smtp.gmail.com'),
+            email_user=request.form.get('email_user'),
+            email_password=request.form.get('email_password'),
+            sender_name=request.form.get('sender_name')
+        )
         flash('Email settings saved!', 'success')
         return redirect(url_for('dashboard'))
+
     return render_template('email_settings.html', user=user)
 
-# ----------------------------------------------------------------------------
+@app.route('/settings/whatsapp', methods=['GET', 'POST'])
+def whatsapp_settings():
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    
+    user = db.get_user(session['user_id'])
+    if request.method == 'POST':
+        db.update_user(
+            user.user_id,
+            twilio_account_sid=request.form.get('twilio_account_sid'),
+            twilio_auth_token=request.form.get('twilio_auth_token'),
+            twilio_whatsapp_number=request.form.get('twilio_whatsapp_number')
+        )
+        flash('WhatsApp settings saved!', 'success')
+        return redirect(url_for('dashboard'))
+
+    return render_template('whatsapp_settings.html', user=user)
+
+@app.route('/settings/facebook', methods=['GET', 'POST'])
+def facebook_settings():
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    
+    user = db.get_user(session['user_id'])
+    if request.method == 'POST':
+        db.update_user(
+            user.user_id,
+            facebook_page_id=request.form.get('facebook_page_id'),
+            facebook_page_token=request.form.get('facebook_page_token')
+        )
+        flash('Facebook settings saved!', 'success')
+        return redirect(url_for('dashboard'))
+
+    return render_template('facebook_settings.html', user=user)
+
+# ============================================================================
 # DASHBOARD
-# ----------------------------------------------------------------------------
+# ============================================================================
 
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('index'))
+    
     user = db.get_user(session['user_id'])
-    if not user:
-        session.clear()
-        flash('User not found. Please log in again.', 'error')
-        return redirect(url_for('index'))
     campaigns = db.get_user_campaigns(session['user_id'])
     stats = [analytics.get_campaign_stats(db, session['user_id'], c.campaign_id) for c in campaigns]
+    
     return render_template('dashboard.html', campaigns=campaigns, stats=stats, user=user)
 
-# ----------------------------------------------------------------------------
+# ============================================================================
 # CAMPAIGN MANAGEMENT
-# ----------------------------------------------------------------------------
+# ============================================================================
 
 @app.route('/campaign/new', methods=['GET', 'POST'])
 def new_campaign():
     if 'user_id' not in session:
         return redirect(url_for('index'))
+    
     if request.method == 'POST':
-        industries = [i.strip() for i in request.form.get('industries', '').split(',') if i.strip()]
-        locations = [l.strip() for l in request.form.get('locations', '').split(',') if l.strip()]
-        countries = [c.strip() for c in request.form.get('countries', '').split(',') if c.strip()]
-        job_titles = [j.strip() for j in request.form.get('job_titles', '').split(',') if j.strip()]
-        search_globally = request.form.get('search_globally') == 'on'
-
+        # Get search queries
+        search_queries = [q.strip() for q in request.form.get('search_queries', '').split(',') if q.strip()]
+        search_locations = [l.strip() for l in request.form.get('search_locations', '').split(',') if l.strip()]
+        ideal_industries = [i.strip() for i in request.form.get('ideal_industries', '').split(',') if i.strip()]
+        
+        # Get enabled channels
+        channels_enabled = request.form.getlist('channels_enabled')
+        
+        try:
+            max_results_per_search = int(request.form.get('max_results_per_search', 20))
+            min_rating = float(request.form.get('min_rating', 0))
+        except:
+            max_results_per_search = 20
+            min_rating = 0
+        
         campaign = Campaign(
             campaign_id=f"camp_{int(time.time())}",
             user_id=session['user_id'],
             name=request.form.get('name'),
             created_at=datetime.datetime.now().isoformat(),
-            ideal_industries=industries,
-            ideal_locations=locations,
-            ideal_countries=countries,
-            ideal_job_titles=job_titles,
-            search_globally=search_globally,
+            search_queries=search_queries,
+            search_locations=search_locations,
+            max_results_per_search=max_results_per_search,
+            ideal_industries=ideal_industries,
+            min_rating=min_rating,
+            channels_enabled=channels_enabled,
             email_subject=request.form.get('email_subject'),
             email_body=request.form.get('email_body'),
+            whatsapp_template=request.form.get('whatsapp_template'),
+            whatsapp_enabled='whatsapp' in channels_enabled,
+            facebook_template=request.form.get('facebook_template'),
+            facebook_enabled='facebook' in channels_enabled,
             notify_email=request.form.get('notify_email')
         )
+        
         db.save_campaign(session['user_id'], campaign)
-
-        flash('Campaign created! Click "Find Real Businesses" to start discovering leads.', 'success')
+        flash('Campaign created!', 'success')
         return redirect(url_for('campaign_detail', campaign_id=campaign.campaign_id))
-
+    
     return render_template('campaign_form.html')
 
 @app.route('/campaign/<campaign_id>')
 def campaign_detail(campaign_id):
     if 'user_id' not in session:
         return redirect(url_for('index'))
+    
     campaign = db.get_campaign(campaign_id)
     if not campaign:
         flash('Campaign not found', 'error')
         return redirect(url_for('dashboard'))
+    
     leads = db.get_campaign_leads(session['user_id'], campaign_id)
     stats = analytics.get_campaign_stats(db, session['user_id'], campaign_id)
+    
     return render_template('campaign_detail.html', campaign=campaign, leads=leads, stats=stats)
 
 @app.route('/campaign/<campaign_id>/delete', methods=['POST'])
@@ -1054,78 +1480,49 @@ def delete_campaign(campaign_id):
 def import_leads(campaign_id):
     if 'user_id' not in session:
         return redirect(url_for('index'))
+    
     if 'leads_file' not in request.files:
         flash('No file', 'error')
         return redirect(url_for('campaign_detail', campaign_id=campaign_id))
+    
     file = request.files['leads_file']
     if file.filename == '' or not file.filename.endswith('.csv'):
         flash('Please upload a CSV file', 'error')
         return redirect(url_for('campaign_detail', campaign_id=campaign_id))
+    
     content = file.read().decode('utf-8')
     leads = LeadProcessor.import_from_csv(content, campaign_id, session['user_id'])
     campaign = db.get_campaign(campaign_id)
+    
     for lead in leads:
         lead.qualification_score = LeadProcessor.score_lead(lead, campaign)
+    
     db.save_leads(session['user_id'], campaign_id, leads)
     flash(f'Imported {len(leads)} leads', 'success')
-    return redirect(url_for('campaign_detail', campaign_id=campaign_id))
-
-@app.route('/campaign/<campaign_id>/send-emails', methods=['POST'])
-def send_emails(campaign_id):
-    if 'user_id' not in session:
-        return redirect(url_for('index'))
-    campaign = db.get_campaign(campaign_id)
-    if not campaign:
-        flash('Campaign not found', 'error')
-        return redirect(url_for('dashboard'))
-    leads = db.get_leads_with_email(session['user_id'], campaign_id, 50)
-    if not leads:
-        flash('No leads with email addresses', 'info')
-        return redirect(url_for('campaign_detail', campaign_id=campaign_id))
-
-    for lead in leads:
-        lead.email_status = EmailStatus.SENDING.value
-        db.update_lead(lead)
-
-    flash(f'Started sending {len(leads)} emails in background', 'success')
-
-    uid = session['user_id']
-    cid = campaign_id
-
-    def send(uid, cid, campaign, leads):
-        for lead in leads:
-            email = email_service.send_campaign_email(lead, campaign)
-            db.save_email(uid, email)
-            lead.email_status = email.status
-            lead.email_sent_at = email.sent_at
-            db.update_lead(lead)
-            time.sleep(1)
-
-    Thread(target=send, args=(uid, cid, campaign, leads)).start()
     return redirect(url_for('campaign_detail', campaign_id=campaign_id))
 
 @app.route('/campaign/<campaign_id>/discover-businesses', methods=['POST'])
 def discover_businesses_route(campaign_id):
     if 'user_id' not in session:
         return redirect(url_for('index'))
+    
     campaign = db.get_campaign(campaign_id)
-    if not campaign:
-        flash('Campaign not found', 'error')
-        return redirect(url_for('dashboard'))
+    user = db.get_user(session['user_id'])
+    api_key = user.google_places_api_key if user else None
 
-    flash('Starting discovery with Apify...', 'success')
+    if not api_key:
+        flash('Please add your Google Places API key first!', 'error')
+        return redirect(url_for('api_settings'))
 
-    uid = session['user_id']
-    cid = campaign_id
-    user = db.get_user(uid)
-    apify_token = user.apify_api_token if user else None
+    flash('Starting business discovery...', 'success')
 
-    if not apify_token:
-        flash('Please add your Apify API token in Settings first!', 'error')
-        return redirect(url_for('apify_settings'))
-
-    def discover(uid, cid, campaign, apify_token):
-        discovered = business_discovery.discover_businesses(campaign, user_apify_token=apify_token, max_businesses=25)
+    def discover(uid, cid, campaign, api_key):
+        discovered = business_discovery.discover_businesses(
+            campaign, 
+            user_api_key=api_key, 
+            max_businesses=campaign.max_results or 50
+        )
+        
         leads = []
         for i, biz in enumerate(discovered):
             lead = Lead(
@@ -1135,112 +1532,258 @@ def discover_businesses_route(campaign_id):
                 name=biz.get('name', 'Contact'),
                 company=biz.get('company', biz.get('name', 'Unknown')),
                 email=biz.get('email', ''),
-                website=biz.get('website', ''),
-                industry=biz.get('industry', campaign.ideal_industries[0] if campaign.ideal_industries else ''),
-                location=biz.get('location', ''),
-                country=biz.get('country', 'United States'),
-                job_title=biz.get('job_title', ''),
-                linkedin_url=biz.get('linkedin_url', ''),
-                linkedin_profile=biz.get('linkedin_profile'),
-                source=biz.get('source', LeadSource.APIFY_LINKEDIN.value),
-                status=LeadStatus.PENDING.value,
-                qualification_score=50,
                 phone=biz.get('phone', ''),
+                facebook_url=biz.get('facebook_url', ''),
+                website=biz.get('website', ''),
+                industry=biz.get('industry', campaign.search_queries[0] if campaign.search_queries else ''),
+                location=biz.get('location', ''),
+                country=biz.get('country', ''),
+                place_id=biz.get('place_id', ''),
+                rating=biz.get('rating', 0),
+                total_ratings=biz.get('total_ratings', 0),
+                price_level=biz.get('price_level', 0),
+                business_status=biz.get('business_status', ''),
+                types=biz.get('types', ''),
+                source=biz.get('source', LeadSource.GOOGLE_PLACES.value),
+                status=LeadStatus.PENDING.value,
                 created_at=datetime.datetime.now().isoformat(),
                 updated_at=datetime.datetime.now().isoformat()
             )
+            
+            lead.qualification_score = LeadProcessor.score_lead(lead, campaign)
             leads.append(lead)
+        
         db.save_leads(uid, cid, leads)
-        print(f"✅ Discovered {len(leads)} leads for {campaign.name}")
+        print(f"✅ Discovered {len(leads)} leads")
+        flash(f'Discovery complete! Found {len(leads)} new leads.', 'success')
 
-    Thread(target=discover, args=(uid, cid, campaign, apify_token)).start()
+    Thread(target=discover, args=(session['user_id'], campaign_id, campaign, api_key)).start()
     return redirect(url_for('campaign_detail', campaign_id=campaign_id))
 
-@app.route('/campaign/<campaign_id>/email-progress', methods=['GET'])
-def email_progress(campaign_id):
+@app.route('/campaign/<campaign_id>/send-messages', methods=['POST'])
+def send_messages(campaign_id):
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    
+    campaign = db.get_campaign(campaign_id)
+    user = db.get_user(session['user_id'])
+    channel = request.form.get('channel', 'email')
+    
+    if not campaign:
+        flash('Campaign not found', 'error')
+        return redirect(url_for('dashboard'))
+    
+    leads = db.get_leads_by_channel(session['user_id'], campaign_id, channel, 50)
+    if not leads:
+        flash(f'No leads with {channel} contact info', 'info')
+        return redirect(url_for('campaign_detail', campaign_id=campaign_id))
+
+    for lead in leads:
+        lead.contact_attempts += 1
+        db.update_lead(lead)
+
+    flash(f'Started sending {len(leads)} messages via {channel} in background', 'success')
+
+    def send(uid, cid, campaign, leads, channel, user):
+        for lead in leads:
+            message = message_service.send_campaign_message(lead, campaign, channel, user)
+            if message:
+                db.save_message(uid, message)
+                lead.last_contacted = message.sent_at
+                db.update_lead(lead)
+            time.sleep(random.uniform(1, 3))  # Random delay between messages
+
+    Thread(target=send, args=(session['user_id'], campaign_id, campaign, leads, channel, user)).start()
+    return redirect(url_for('campaign_detail', campaign_id=campaign_id))
+
+# ============================================================================
+# MANUAL SEARCH
+# ============================================================================
+
+@app.route('/search', methods=['GET', 'POST'])
+def manual_search():
+    if 'user_id' not in session:
+        return redirect(url_for('index'))
+    
+    user = db.get_user(session['user_id'])
+    if not user or not user.google_places_api_key:
+        flash('Please add your Google Places API key first', 'error')
+        return redirect(url_for('api_settings'))
+    
+    campaigns = db.get_user_campaigns(session['user_id'])
+    results = []
+    
+    if request.method == 'POST':
+        query = request.form.get('query', '')
+        location = request.form.get('location', '')
+        
+        try:
+            max_results = int(request.form.get('max_results', 20))
+        except:
+            max_results = 20
+        
+        if query:
+            flash(f'Searching for "{query}"...', 'info')
+            discovery = GooglePlacesDiscovery(user.google_places_api_key)
+            results = discovery.search_places(
+                query=query,
+                location=location,
+                max_results=max_results
+            )
+            flash(f'Found {len(results)} businesses', 'success')
+    
+    return render_template('search.html', results=results, campaigns=campaigns)
+
+@app.route('/search/save-to-campaign', methods=['POST'])
+def save_search_to_campaign():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
+    
+    data = request.json
+    campaign_id = data.get('campaign_id')
+    businesses = data.get('businesses', [])
+    
+    if not campaign_id or not businesses:
+        return jsonify({'error': 'Missing data'}), 400
+    
     campaign = db.get_campaign(campaign_id)
     if not campaign:
         return jsonify({'error': 'Campaign not found'}), 404
-    leads = db.get_campaign_leads(session['user_id'], campaign_id)
-    total_with_email = len([l for l in leads if l.email and '@' in l.email])
-    sent = len([l for l in leads if l.email_status == EmailStatus.SENT.value])
-    sending = len([l for l in leads if l.email_status == EmailStatus.SENDING.value])
-    failed = len([l for l in leads if l.email_status == EmailStatus.FAILED.value])
+    
+    leads = []
+    for i, biz in enumerate(businesses):
+        lead = Lead(
+            lead_id=f"lead_{int(time.time())}_{i}_{random.randint(1000,9999)}",
+            campaign_id=campaign_id,
+            user_id=session['user_id'],
+            name=biz.get('name', 'Contact'),
+            company=biz.get('company', biz.get('name', 'Unknown')),
+            email='',
+            phone=biz.get('phone', ''),
+            facebook_url=biz.get('facebook_url', ''),
+            website=biz.get('website', ''),
+            industry=biz.get('industry', ''),
+            location=biz.get('location', ''),
+            country=biz.get('country', ''),
+            place_id=biz.get('place_id', ''),
+            rating=biz.get('rating', 0),
+            total_ratings=biz.get('total_ratings', 0),
+            source=LeadSource.MANUAL_SEARCH.value,
+            status=LeadStatus.PENDING.value,
+            created_at=datetime.datetime.now().isoformat(),
+            updated_at=datetime.datetime.now().isoformat()
+        )
+        lead.qualification_score = LeadProcessor.score_lead(lead, campaign)
+        leads.append(lead)
+    
+    db.save_leads(session['user_id'], campaign_id, leads)
+    
     return jsonify({
-        'total': total_with_email,
-        'sent': sent,
-        'sending': sending,
-        'failed': failed,
-        'campaign_name': campaign.name
+        'success': True,
+        'count': len(leads),
+        'message': f'Saved {len(leads)} leads to campaign'
     })
 
-# ----------------------------------------------------------------------------
+# ============================================================================
 # LEAD ROUTES
-# ----------------------------------------------------------------------------
+# ============================================================================
 
 @app.route('/lead/<lead_id>')
 def lead_detail(lead_id):
     if 'user_id' not in session:
         return redirect(url_for('index'))
+    
     lead = db.get_lead(lead_id)
     if not lead:
         flash('Lead not found', 'error')
         return redirect(url_for('dashboard'))
-    emails = db.get_lead_emails(lead_id)
+    
+    messages = db.get_lead_messages(lead_id)
     campaign = db.get_campaign(lead.campaign_id)
-    return render_template('lead_detail.html', lead=lead, emails=emails, campaign=campaign)
+    user = db.get_user(session['user_id'])
+    
+    # Generate WhatsApp link if phone exists
+    whatsapp_link = None
+    if lead.phone and campaign and campaign.whatsapp_template:
+        message = campaign.whatsapp_template.replace("[Name]", lead.name.split()[0])
+        message = message.replace("[Company]", lead.company)
+        whatsapp_link = message_service.generate_whatsapp_link(lead.phone, message)
+    
+    return render_template('lead_detail.html', lead=lead, messages=messages, 
+                          campaign=campaign, whatsapp_link=whatsapp_link)
 
-@app.route('/lead/<lead_id>/send-email', methods=['POST'])
-def send_lead_email(lead_id):
+@app.route('/lead/<lead_id>/send-message', methods=['POST'])
+def send_lead_message(lead_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
+    
     lead = db.get_lead(lead_id)
     if not lead:
         return jsonify({'error': 'Lead not found'}), 404
+    
     campaign = db.get_campaign(lead.campaign_id)
-    lead.email_status = EmailStatus.SENDING.value
-    db.update_lead(lead)
-    email = email_service.send_campaign_email(lead, campaign)
-    db.save_email(session['user_id'], email)
-    lead.email_status = email.status
-    lead.email_sent_at = email.sent_at
-    db.update_lead(lead)
-    return jsonify({'status': email.status, 'message': 'Email sent' if email.status == EmailStatus.SENT.value else 'Failed'})
+    user = db.get_user(session['user_id'])
+    channel = request.json.get('channel', 'email')
+    
+    message = message_service.send_campaign_message(lead, campaign, channel, user)
+    
+    if message:
+        db.save_message(session['user_id'], message)
+        lead.last_contacted = message.sent_at
+        lead.contact_attempts += 1
+        db.update_lead(lead)
+        
+        return jsonify({
+            'status': message.status,
+            'message_id': message.message_id,
+            'channel': channel
+        })
+    else:
+        return jsonify({'error': f'Failed to send via {channel}'}), 500
 
-# ----------------------------------------------------------------------------
+# ============================================================================
 # ANALYTICS
-# ----------------------------------------------------------------------------
+# ============================================================================
 
 @app.route('/analytics')
 def analytics_dashboard():
     if 'user_id' not in session:
         return redirect(url_for('index'))
+    
     campaigns = db.get_user_campaigns(session['user_id'])
     all_stats = [analytics.get_campaign_stats(db, session['user_id'], c.campaign_id) for c in campaigns]
-    total_hot = sum(s.get('hot_leads',0) for s in all_stats)
-    total_leads = sum(s.get('total_leads',0) for s in all_stats)
-    total_emails = sum(s.get('emails_sent',0) for s in all_stats)
-    total_with_phone = sum(s.get('leads_with_phone',0) for s in all_stats)
-    return render_template('analytics.html', stats=all_stats, total_hot=total_hot,
-                           total_leads=total_leads, total_emails=total_emails,
-                           total_with_phone=total_with_phone, total_campaigns=len(campaigns))
+    
+    # Aggregate stats
+    total_leads = sum(s.get('total_leads', 0) for s in all_stats)
+    total_hot = sum(s.get('hot_leads', 0) for s in all_stats)
+    total_messages = sum(s.get('total_sent', 0) for s in all_stats)
+    
+    # Channel breakdown
+    channel_totals = {
+        'email': sum(s.get('channel_stats', {}).get('email', {}).get('sent', 0) for s in all_stats),
+        'whatsapp': sum(s.get('channel_stats', {}).get('whatsapp', {}).get('sent', 0) for s in all_stats),
+        'facebook': sum(s.get('channel_stats', {}).get('facebook', {}).get('sent', 0) for s in all_stats)
+    }
+    
+    return render_template('analytics.html', 
+                          stats=all_stats, 
+                          total_leads=total_leads,
+                          total_hot=total_hot,
+                          total_messages=total_messages,
+                          channel_totals=channel_totals,
+                          total_campaigns=len(campaigns))
 
-# ----------------------------------------------------------------------------
-# HEALTH CHECK (for Render)
-# ----------------------------------------------------------------------------
+# ============================================================================
+# HEALTH CHECK
+# ============================================================================
 
 @app.route('/health', methods=['GET', 'HEAD'])
 def health_check():
     return '', 200
 
-# ----------------------------------------------------------------------------
+# ============================================================================
 # MAIN
-# ----------------------------------------------------------------------------
-# ----------------------------------------------------------------------------
-# MAIN
-# ----------------------------------------------------------------------------
+# ============================================================================
 
 def create_default_user():
     if not db.get_user_by_username('admin'):
@@ -1259,31 +1802,27 @@ def open_browser():
     webbrowser.open('http://localhost:5000')
 
 def main():
-    print("="*60)
-    print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM")
-    print("="*60)
-    print("Powered by Apify (LinkedIn Company Employees + Google Maps)")
-    print("No other API keys needed - just your Apify token")
-    print("Manual discovery only - click 'Find Real Businesses'")
+    print("="*70)
+    print(" FREELANCE COPYWRITER CLIENT ACQUISITION SYSTEM - MULTI-CHANNEL")
+    print("="*70)
+    print("Powered by:")
+    print("  • Google Places API - Find businesses")
+    print("  • Email - Send campaigns via SMTP")
+    print("  • WhatsApp - Send messages via Twilio")
+    print("  • Facebook - Send messages via Messenger")
+    print("="*70)
+    
     create_default_user()
+    
     print("\n✅ System ready!")
     print("🔗 http://localhost:5000")
     print("👤 Login: admin / admin123")
-    print("="*60)
+    print("="*70)
     
-    # Only open browser locally, not on Render
     if not os.environ.get('RENDER'):
         Thread(target=open_browser).start()
 
-# THIS IS THE ONLY APP.RUN CALL - EVERYTHING ELSE IS REMOVED
 if __name__ == "__main__":
-    # Get port from environment variable (for Render) or use 5000 locally
     port = int(os.environ.get("PORT", 5000))
     print(f"🚀 Starting Flask app on port {port}")
-    print(f"🌐 Binding to 0.0.0.0:{port}")
-    
-    # Small delay to ensure everything is loaded
-    time.sleep(1)
-    
-    # Run the app - this is the ONLY place where app runs
-    app.run(host='0.0.0.0', port=port, debug=False)  # debug=False for production
+    app.run(host='0.0.0.0', port=port, debug=False)

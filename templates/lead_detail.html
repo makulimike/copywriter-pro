@@ -1,254 +1,158 @@
 {% extends "base.html" %}
-{% block title %}{{ lead.name }} - {{ lead.company }}{% endblock %}
+
+{% block title %}{{ lead.name }} - Lead Details{% endblock %}
+
 {% block content %}
-<div class="px-4 sm:px-0">
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">{{ lead.name }}</h1>
-            <p class="mt-1 text-lg text-gray-600">{{ lead.company }}</p>
-            {% if lead.job_title %}
-            <p class="text-md text-gray-500">{{ lead.job_title }}</p>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1>Lead: {{ lead.name }}</h1>
+    <a href="{{ url_for('campaign_detail', campaign_id=campaign.campaign_id) }}" class="btn btn-secondary">← Back to Campaign</a>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;">
+    <!-- Lead Information -->
+    <div class="card">
+        <h2 style="margin-bottom: 1.5rem;">📋 Lead Information</h2>
+        
+        <table style="width: 100%;">
+            <tr><td style="padding: 0.5rem; font-weight: 600;">Name:</td><td>{{ lead.name }}</td></tr>
+            <tr><td style="padding: 0.5rem; font-weight: 600;">Company:</td><td>{{ lead.company }}</td></tr>
+            <tr><td style="padding: 0.5rem; font-weight: 600;">Industry:</td><td>{{ lead.industry or 'N/A' }}</td></tr>
+            <tr><td style="padding: 0.5rem; font-weight: 600;">Location:</td><td>{{ lead.location or 'N/A' }}</td></tr>
+            <tr><td style="padding: 0.5rem; font-weight: 600;">Country:</td><td>{{ lead.country or 'N/A' }}</td></tr>
+            <tr><td style="padding: 0.5rem; font-weight: 600;">Rating:</td><td>{{ lead.rating }} ⭐ ({{ lead.total_ratings }} reviews)</td></tr>
+            
+            {% if lead.email %}
+            <tr><td style="padding: 0.5rem; font-weight: 600;">Email:</td><td><a href="mailto:{{ lead.email }}">{{ lead.email }}</a></td></tr>
             {% endif %}
+            
+            {% if lead.phone %}
+            <tr><td style="padding: 0.5rem; font-weight: 600;">Phone:</td><td><a href="tel:{{ lead.phone }}">{{ lead.phone }}</a></td></tr>
+            {% endif %}
+            
+            {% if lead.facebook_url %}
+            <tr><td style="padding: 0.5rem; font-weight: 600;">Facebook:</td><td><a href="{{ lead.facebook_url }}" target="_blank">{{ lead.facebook_url }}</a></td></tr>
+            {% endif %}
+            
+            {% if lead.website %}
+            <tr><td style="padding: 0.5rem; font-weight: 600;">Website:</td><td><a href="{{ lead.website }}" target="_blank">{{ lead.website }}</a></td></tr>
+            {% endif %}
+        </table>
+        
+        <div style="margin-top: 2rem;">
+            <h3>Qualification Score: {{ lead.qualification_score }}/100</h3>
+            <div style="background: #ecf0f1; height: 10px; border-radius: 5px;">
+                <div style="background: {% if lead.qualification_score >= 70 %}#27ae60{% elif lead.qualification_score >= 40 %}#f39c12{% else %}#e74c3c{% endif %}; 
+                             width: {{ lead.qualification_score }}%; height: 10px; border-radius: 5px;"></div>
+            </div>
         </div>
-        <div class="flex gap-3">
-            {% if lead.email and '@' in lead.email %}
-            <button onclick="sendEmail()" id="sendEmailBtn"
-                    class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                Send Email
+    </div>
+    
+    <!-- Actions -->
+    <div>
+        <!-- Quick Actions -->
+        <div class="card" style="margin-bottom: 2rem;">
+            <h2 style="margin-bottom: 1rem;">⚡ Quick Actions</h2>
+            
+            {% if lead.email and 'email' in campaign.channels_enabled %}
+            <button onclick="sendMessage('email')" class="btn btn-primary" style="width: 100%; margin-bottom: 0.5rem;" id="emailBtn">
+                📧 Send Email
             </button>
             {% endif %}
-            {% if lead.linkedin_url %}
-            <a href="{{ lead.linkedin_url }}" target="_blank"
-               class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                View LinkedIn
+            
+            {% if lead.phone and 'whatsapp' in campaign.channels_enabled %}
+            <button onclick="sendMessage('whatsapp')" class="btn btn-success" style="width: 100%; margin-bottom: 0.5rem;" id="whatsappBtn">
+                📱 Send WhatsApp
+            </button>
+            {% endif %}
+            
+            {% if lead.facebook_url and 'facebook' in campaign.channels_enabled %}
+            <button onclick="sendMessage('facebook')" class="btn btn-info" style="width: 100%; margin-bottom: 0.5rem;" id="facebookBtn">
+                👥 Send Facebook Message
+            </button>
+            {% endif %}
+            
+            {% if whatsapp_link %}
+            <a href="{{ whatsapp_link }}" target="_blank" class="btn btn-success" style="width: 100%; margin-top: 0.5rem; display: block; text-align: center;">
+                📱 WhatsApp Link
             </a>
             {% endif %}
+            
+            <div id="messageResult" style="margin-top: 1rem;"></div>
         </div>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- Lead Information Card -->
-        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-                <h3 class="text-lg font-medium text-gray-900">Lead Information</h3>
-            </div>
-            <div class="px-6 py-5">
-                <dl class="grid grid-cols-1 gap-4">
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Full name</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.name }}</dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Company</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.company }}</dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Job Title</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.job_title or '-' }}</dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Email</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">
-                            {{ lead.email }}
-                            {% if lead.email and '@' in lead.email %}
-                            <a href="mailto:{{ lead.email }}" class="ml-2 text-indigo-600 hover:text-indigo-900">Send</a>
+        
+        <!-- Message History -->
+        <div class="card">
+            <h2 style="margin-bottom: 1rem;">📨 Message History</h2>
+            {% if messages %}
+                {% for msg in messages %}
+                <div style="border: 1px solid #ecf0f1; border-radius: 4px; padding: 1rem; margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <strong>
+                            {% if msg.channel == 'email' %}📧 Email
+                            {% elif msg.channel == 'whatsapp' %}📱 WhatsApp
+                            {% elif msg.channel == 'facebook' %}👥 Facebook
                             {% endif %}
-                        </dd>
+                        </strong>
+                        <span style="background: {% if msg.status == 'sent' %}#27ae60{% elif msg.status == 'failed' %}#e74c3c{% else %}#95a5a6{% endif %}; 
+                                     color: white; padding: 0.2rem 0.5rem; border-radius: 4px;">
+                            {{ msg.status }}
+                        </span>
                     </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Phone</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">
-                            {{ lead.phone or '-' }}
-                            {% if lead.phone %}
-                            <a href="tel:{{ lead.phone }}" class="ml-2 text-indigo-600 hover:text-indigo-900">Call</a>
-                            {% endif %}
-                        </dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Website</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">
-                            {% if lead.website %}
-                            <a href="{{ lead.website }}" target="_blank" class="text-indigo-600 hover:text-indigo-900">{{ lead.website }}</a>
-                            {% else %}
-                            -
-                            {% endif %}
-                        </dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Industry</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.industry or '-' }}</dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Location</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.location or '-' }}</dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Country</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.country or '-' }}</dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Source</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
-                                {{ lead.source }}
-                            </span>
-                        </dd>
-                    </div>
-                </dl>
-            </div>
-        </div>
-
-        <!-- Status Card -->
-        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-                <h3 class="text-lg font-medium text-gray-900">Lead Status</h3>
-            </div>
-            <div class="px-6 py-5">
-                <dl class="grid grid-cols-1 gap-4">
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Status</dt>
-                        <dd class="text-sm col-span-2">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                {% if lead.status == 'hot' %}bg-green-100 text-green-800
-                                {% elif lead.status == 'maybe' %}bg-yellow-100 text-yellow-800
-                                {% elif lead.status == 'cold' %}bg-gray-100 text-gray-800
-                                {% else %}bg-blue-100 text-blue-800{% endif %}">
-                                {{ lead.status }}
-                            </span>
-                        </dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Qualification Score</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">
-                            <div class="flex items-center">
-                                <span class="mr-2">{{ lead.qualification_score }}/100</span>
-                                <div class="w-24 bg-gray-200 rounded-full h-2.5">
-                                    <div class="bg-indigo-600 h-2.5 rounded-full" style="width: {{ lead.qualification_score }}%"></div>
-                                </div>
-                            </div>
-                        </dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Email Status</dt>
-                        <dd class="text-sm col-span-2">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                {% if lead.email_status == 'sent' %}bg-green-100 text-green-800
-                                {% elif lead.email_status == 'sending' %}bg-yellow-100 text-yellow-800
-                                {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                {{ lead.email_status }}
-                                {% if lead.email_status == 'sending' %}
-                                <svg class="ml-1 h-3 w-3 animate-spin inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                {% endif %}
-                            </span>
-                            {% if lead.email_sent_at %}
-                            <span class="block text-xs text-gray-500 mt-1">Sent: {{ lead.email_sent_at[:16].replace('T', ' ') }}</span>
-                            {% endif %}
-                        </dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Created</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.created_at[:16].replace('T', ' ') }}</dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Last Updated</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.updated_at[:16].replace('T', ' ') }}</dd>
-                    </div>
-                    <div class="grid grid-cols-3 gap-4">
-                        <dt class="text-sm font-medium text-gray-500">Notes</dt>
-                        <dd class="text-sm text-gray-900 col-span-2">{{ lead.notes or 'No notes' }}</dd>
-                    </div>
-                </dl>
-            </div>
-        </div>
-    </div>
-
-    <!-- Email History -->
-    <div class="mt-6 bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-        <div class="px-6 py-5 border-b border-gray-200 bg-gray-50">
-            <h3 class="text-lg font-medium text-gray-900">Email History</h3>
-        </div>
-        <div class="overflow-x-auto">
-            {% if emails %}
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Error</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    {% for email in emails %}
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ email.sent_at[:16].replace('T', ' ') }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ email.subject }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                {% if email.status == 'sent' %}bg-green-100 text-green-800
-                                {% elif email.status == 'failed' %}bg-red-100 text-red-800
-                                {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                {{ email.status }}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ email.error_message or '-' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    <p style="color: #7f8c8d; font-size: 0.9rem;">{{ msg.sent_at[:16] }}</p>
+                    <div style="background: #f8f9fa; padding: 0.75rem; border-radius: 4px; white-space: pre-wrap;">{{ msg.content }}</div>
+                    
+                    {% if msg.read_at %}
+                    <p style="color: #27ae60; font-size: 0.8rem; margin-top: 0.5rem;">✓ Read at {{ msg.read_at[:16] }}</p>
+                    {% endif %}
+                    {% if msg.replied_at %}
+                    <p style="color: #27ae60; font-size: 0.8rem;">↩️ Replied at {{ msg.replied_at[:16] }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
             {% else %}
-            <div class="px-6 py-5 text-center text-gray-500">
-                No emails sent yet.
-            </div>
+                <p style="color: #7f8c8d; text-align: center;">No messages sent yet.</p>
             {% endif %}
         </div>
     </div>
 </div>
 
 <script>
-function sendEmail() {
-    const btn = document.getElementById('sendEmailBtn');
-    const originalText = btn.innerHTML;
+function sendMessage(channel) {
+    const btn = document.getElementById(channel + 'Btn');
+    const result = document.getElementById('messageResult');
     
-    btn.disabled = true;
-    btn.innerHTML = `
-        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        Sending...
-    `;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+    }
+    result.innerHTML = '';
     
-    fetch('/lead/{{ lead.lead_id }}/send-email', {
+    fetch('/lead/{{ lead.lead_id }}/send-message', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: channel })
     })
     .then(response => response.json())
     .then(data => {
         if (data.status === 'sent') {
-            btn.innerHTML = '✅ Sent!';
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+            result.innerHTML = '<div class="flash success">✅ Message sent successfully!</div>';
+            setTimeout(() => location.reload(), 1500);
         } else {
-            btn.innerHTML = '❌ Failed';
-            setTimeout(() => {
+            result.innerHTML = '<div class="flash error">❌ Failed to send message</div>';
+            if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = originalText;
-            }, 2000);
+                btn.textContent = channel === 'email' ? '📧 Send Email' : 
+                                 channel === 'whatsapp' ? '📱 Send WhatsApp' : '👥 Send Facebook';
+            }
         }
     })
     .catch(error => {
-        btn.innerHTML = '❌ Error';
-        setTimeout(() => {
+        result.innerHTML = '<div class="flash error">❌ Error sending message</div>';
+        if (btn) {
             btn.disabled = false;
-            btn.innerHTML = originalText;
-        }, 2000);
+            btn.textContent = channel === 'email' ? '📧 Send Email' : 
+                             channel === 'whatsapp' ? '📱 Send WhatsApp' : '👥 Send Facebook';
+        }
     });
 }
 </script>

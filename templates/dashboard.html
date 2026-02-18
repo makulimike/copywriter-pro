@@ -1,108 +1,80 @@
 {% extends "base.html" %}
-{% block title %}Dashboard{% endblock %}
+
+{% block title %}Dashboard - Copywriter Pro{% endblock %}
+
 {% block content %}
-<div class="px-4 sm:px-0">
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Your Campaigns</h1>
-        <a href="/campaign/new" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-            New Campaign
-        </a>
-    </div>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1>📊 Your Campaigns</h1>
+    <a href="{{ url_for('new_campaign') }}" class="btn btn-success">+ New Campaign</a>
+</div>
 
-    {% if not user.email_user %}
-    <div class="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4">
-        <div class="flex">
-            <div class="flex-shrink-0">
-                <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
-                    <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
-                </svg>
-            </div>
-            <div class="ml-3">
-                <p class="text-sm text-blue-700">
-                    <strong>Configure email settings</strong> to send campaign emails.
-                    <a href="/settings/email" class="font-medium underline text-blue-700 hover:text-blue-600">Configure now →</a>
-                </p>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    {% if not user.apify_api_token %}
-    <div class="mb-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
-        <div class="flex">
-            <div class="flex-shrink-0">
-                <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                </svg>
-            </div>
-            <div class="ml-3">
-                <p class="text-sm text-yellow-700">
-                    <strong>Add your Apify token</strong> to discover real businesses on LinkedIn.
-                    <a href="/settings/apify" class="font-medium underline text-yellow-700 hover:text-yellow-600">Add token →</a>
-                </p>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    {% if campaigns %}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+{% if campaigns %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem;">
         {% for campaign in campaigns %}
-        <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200 card-hover">
-            <div class="px-4 py-5 sm:p-6">
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ campaign.name }}</h3>
-                <p class="text-sm text-gray-500 mb-4">Created: {{ campaign.created_at[:10] }}</p>
+            {% set stat = stats[loop.index0] %}
+            <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                    <h3 style="color: #2c3e50;">{{ campaign.name }}</h3>
+                    <span style="background: #27ae60; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">{{ campaign.status }}</span>
+                </div>
                 
-                {% if stats and stats[loop.index0] %}
-                {% set s = stats[loop.index0] %}
-                <div class="grid grid-cols-2 gap-4 mb-4">
-                    <div class="bg-gray-50 rounded-lg p-3">
-                        <p class="text-xs text-gray-500 uppercase tracking-wider">Leads</p>
-                        <p class="text-xl font-semibold text-gray-900">{{ s.total_leads }}</p>
+                <p style="color: #7f8c8d; margin-bottom: 1rem;">Created: {{ campaign.created_at[:10] }}</p>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #3498db;">{{ stat.total_leads }}</div>
+                        <div style="font-size: 0.9rem; color: #7f8c8d;">Total Leads</div>
                     </div>
-                    <div class="bg-gray-50 rounded-lg p-3">
-                        <p class="text-xs text-gray-500 uppercase tracking-wider">Hot</p>
-                        <p class="text-xl font-semibold text-green-600">{{ s.hot_leads }}</p>
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #27ae60;">{{ stat.emails_sent }}</div>
+                        <div style="font-size: 0.9rem; color: #7f8c8d;">Emails Sent</div>
                     </div>
-                    <div class="bg-gray-50 rounded-lg p-3">
-                        <p class="text-xs text-gray-500 uppercase tracking-wider">Emails</p>
-                        <p class="text-xl font-semibold text-gray-900">{{ s.emails_sent }}</p>
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #e67e22;">{{ stat.hot_leads }}</div>
+                        <div style="font-size: 0.9rem; color: #7f8c8d;">Hot Leads</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #f39c12;">{{ stat.avg_rating }}</div>
+                        <div style="font-size: 0.9rem; color: #7f8c8d;">Avg Rating</div>
                     </div>
                 </div>
-                {% endif %}
-
-                <div class="flex flex-col sm:flex-row gap-3">
-                    <a href="/campaign/{{ campaign.campaign_id }}" 
-                       class="flex-1 inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                        View Details
-                    </a>
-                    <form action="/campaign/{{ campaign.campaign_id }}/discover-businesses" method="POST" class="flex-1">
-                        <button type="submit" 
-                                class="w-full inline-flex justify-center items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                            Find Businesses
-                        </button>
+                
+                <div style="margin-top: auto; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <a href="{{ url_for('campaign_detail', campaign_id=campaign.campaign_id) }}" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.9rem;">View</a>
+                    <form method="POST" action="{{ url_for('delete_campaign', campaign_id=campaign.campaign_id) }}" style="display: inline;" onsubmit="return confirm('Delete this campaign?');">
+                        <button type="submit" class="btn btn-danger" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Delete</button>
                     </form>
                 </div>
             </div>
-        </div>
         {% endfor %}
     </div>
-    {% else %}
-    <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
-        <div class="px-4 py-12 text-center">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
-            </svg>
-            <h3 class="mt-4 text-lg font-medium text-gray-900">No campaigns yet</h3>
-            <p class="mt-2 text-sm text-gray-500">Create your first campaign to start finding real businesses on LinkedIn</p>
-            <div class="mt-6">
-                <a href="/campaign/new" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
-                    Create Campaign
-                </a>
-            </div>
-        </div>
+{% else %}
+    <div class="card text-center">
+        <p style="font-size: 1.2rem; color: #7f8c8d; margin-bottom: 2rem;">You don't have any campaigns yet.</p>
+        <a href="{{ url_for('new_campaign') }}" class="btn btn-success">Create Your First Campaign</a>
     </div>
-    {% endif %}
+{% endif %}
+
+<div style="margin-top: 3rem;">
+    <h2>🚀 Quick Actions</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; margin-top: 1rem;">
+        <a href="{{ url_for('manual_search') }}" class="card" style="display: block; text-decoration: none; color: inherit; padding: 1.5rem; text-align: center;">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</div>
+            <h3>Manual Search</h3>
+            <p style="color: #7f8c8d;">Search for businesses right now</p>
+        </a>
+        
+        <a href="{{ url_for('api_settings') }}" class="card" style="display: block; text-decoration: none; color: inherit; padding: 1.5rem; text-align: center;">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚙️</div>
+            <h3>API Settings</h3>
+            <p style="color: #7f8c8d;">Configure Google Places API</p>
+        </a>
+        
+        <a href="{{ url_for('analytics_dashboard') }}" class="card" style="display: block; text-decoration: none; color: inherit; padding: 1.5rem; text-align: center;">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📈</div>
+            <h3>Analytics</h3>
+            <p style="color: #7f8c8d;">View campaign performance</p>
+        </a>
+    </div>
 </div>
 {% endblock %}

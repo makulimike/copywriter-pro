@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}WhatsApp Settings - Copywriter Pro{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>📱 WhatsApp Settings</h1>
+    
+    <div style="background: #e8f4fd; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+        <h3 style="color: #2c3e50; margin-bottom: 1rem;">📌 Twilio Setup Instructions:</h3>
+        <ol style="margin-left: 1.5rem; line-height: 1.8;">
+            <li>Sign up for a <a href="https://www.twilio.com/try-twilio" target="_blank">Twilio account</a></li>
+            <li>Get your Account SID and Auth Token from the console</li>
+            <li>Enable WhatsApp Sandbox or get a WhatsApp Business number</li>
+            <li>Your WhatsApp number should be in format: <code>whatsapp:+14155238886</code></li>
+        </ol>
+        <p style="margin-top: 1rem; padding: 0.5rem; background: #fff3cd; border-radius: 4px;">
+            <strong>⚠️ Note:</strong> WhatsApp messages cost about $0.005 - $0.05 per message depending on region.
+        </p>
+    </div>
+
+    <form method="POST">
+        <div style="margin-bottom: 1.5rem;">
+            <label for="twilio_account_sid" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Twilio Account SID:</label>
+            <input type="text" id="twilio_account_sid" name="twilio_account_sid" 
+                   value="{{ user.twilio_account_sid or '' }}" 
+                   placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: monospace;">
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label for="twilio_auth_token" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Twilio Auth Token:</label>
+            <input type="password" id="twilio_auth_token" name="twilio_auth_token" 
+                   value="{{ user.twilio_auth_token or '' }}" 
+                   placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-family: monospace;">
+        </div>
+
+        <div style="margin-bottom: 2rem;">
+            <label for="twilio_whatsapp_number" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">WhatsApp Number:</label>
+            <input type="text" id="twilio_whatsapp_number" name="twilio_whatsapp_number" 
+                   value="{{ user.twilio_whatsapp_number or '' }}" 
+                   placeholder="whatsapp:+14155238886"
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+            <p style="color: #7f8c8d; margin-top: 0.25rem;">Format: whatsapp:+[country code][number]</p>
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="btn btn-primary">Save WhatsApp Settings</button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #ecf0f1;">
+
+    <h3>📝 WhatsApp Templates Tips:</h3>
+    <ul style="margin-left: 1.5rem; margin-top: 1rem; color: #34495e; line-height: 1.8;">
+        <li><strong>Keep it short:</strong> WhatsApp messages should be concise</li>
+        <li><strong>Use placeholders:</strong> [Name], [Company], [Industry]</li>
+        <li><strong>Include a call to action:</strong> Ask a question or suggest a call</li>
+        <li><strong>Example:</strong> "Hi [Name], saw [Company] on Google Maps. Can I help with your marketing?"</li>
+    </ul>
+</div>
+{% endblock %}
