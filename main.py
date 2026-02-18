@@ -270,7 +270,10 @@ class Database:
                             'facebook_page_id', 'facebook_page_token', 'sender_name']
             for col in new_user_cols:
                 if not self.column_exists('users', col):
-                    self.execute_query(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+                    try:
+                        self.execute_query(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+                    except:
+                        pass
 
         # Leads table migrations
         if 'leads' in table_names:
@@ -278,12 +281,13 @@ class Database:
                             'last_contacted', 'contact_attempts']
             for col in new_lead_cols:
                 if not self.column_exists('leads', col):
-                    self.execute_query(f"ALTER TABLE leads ADD COLUMN {col} TEXT")
+                    try:
+                        self.execute_query(f"ALTER TABLE leads ADD COLUMN {col} TEXT")
+                    except:
+                        pass
 
-        # Rename emails table to messages (more generic)
-        if 'emails' in table_names and not self.column_exists('sqlite_master', 'name') == 'messages':
-            self.execute_query('ALTER TABLE emails RENAME TO messages')
-        elif not self.column_exists('sqlite_master', 'name') == 'messages':
+        # Handle messages table
+        if 'messages' not in table_names:
             # Create messages table if it doesn't exist
             with self.get_connection() as conn:
                 cursor = conn.cursor()
@@ -303,6 +307,15 @@ class Database:
                         FOREIGN KEY (lead_id) REFERENCES leads (lead_id)
                     )
                 ''')
+        else:
+            # Check if messages table needs new columns
+            msg_columns = [col['name'] for col in self.execute_query("PRAGMA table_info(messages)")]
+            for col in ['read_at', 'replied_at']:
+                if col not in msg_columns:
+                    try:
+                        self.execute_query(f"ALTER TABLE messages ADD COLUMN {col} TEXT")
+                    except:
+                        pass
 
     def init_db(self):
         with self.get_connection() as conn:
@@ -382,7 +395,7 @@ class Database:
                 )
             ''')
             
-            # Messages table (replaces emails)
+            # Messages table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS messages (
                     message_id TEXT PRIMARY KEY,
@@ -489,6 +502,11 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             for lead in leads:
+                # Ensure rating is not None
+                rating = lead.rating if lead.rating is not None else 0.0
+                total_ratings = lead.total_ratings if lead.total_ratings is not None else 0
+                price_level = lead.price_level if lead.price_level is not None else 0
+                
                 cursor.execute('''
                     INSERT OR REPLACE INTO leads (
                         lead_id, campaign_id, user_id, name, company, email, phone,
@@ -505,8 +523,8 @@ class Database:
                     lead.timezone, lead.notes, lead.status, lead.qualification_score,
                     lead.preferred_channel, lead.last_contacted, lead.contact_attempts,
                     lead.linkedin_url, json.dumps(lead.linkedin_profile) if lead.linkedin_profile else None,
-                    lead.source, lead.job_title, lead.place_id, lead.rating,
-                    lead.total_ratings, lead.price_level, lead.business_status,
+                    lead.source, lead.job_title, lead.place_id, rating,
+                    total_ratings, price_level, lead.business_status,
                     lead.types, lead.created_at, lead.updated_at
                 ))
 
@@ -519,6 +537,9 @@ class Database:
             lead = Lead(**filtered)
             if r.get('linkedin_profile'):
                 lead.linkedin_profile = json.loads(r['linkedin_profile'])
+            # Ensure rating is float
+            if lead.rating is None:
+                lead.rating = 0.0
             leads.append(lead)
         return leads
 
@@ -545,11 +566,17 @@ class Database:
             lead = Lead(**filtered)
             if r.get('linkedin_profile'):
                 lead.linkedin_profile = json.loads(r['linkedin_profile'])
+            if lead.rating is None:
+                lead.rating = 0.0
             leads.append(lead)
         return leads
 
     def update_lead(self, lead: Lead):
         lead.updated_at = datetime.datetime.now().isoformat()
+        rating = lead.rating if lead.rating is not None else 0.0
+        total_ratings = lead.total_ratings if lead.total_ratings is not None else 0
+        price_level = lead.price_level if lead.price_level is not None else 0
+        
         self.execute_update('''
             UPDATE leads SET 
                 status = ?, qualification_score = ?, preferred_channel = ?,
@@ -565,7 +592,7 @@ class Database:
             lead.country, lead.timezone, lead.linkedin_url,
             json.dumps(lead.linkedin_profile) if lead.linkedin_profile else None,
             lead.source, lead.job_title, lead.phone, lead.facebook_url, lead.facebook_id,
-            lead.rating, lead.total_ratings, lead.price_level, lead.business_status, lead.types,
+            rating, total_ratings, price_level, lead.business_status, lead.types,
             lead.updated_at, lead.lead_id
         ))
 
@@ -576,6 +603,8 @@ class Database:
             lead = Lead(**filtered)
             if r[0].get('linkedin_profile'):
                 lead.linkedin_profile = json.loads(r[0]['linkedin_profile'])
+            if lead.rating is None:
+                lead.rating = 0.0
             return lead
         return None
 
@@ -689,6 +718,11 @@ class GooglePlacesDiscovery:
                     # Try to find Facebook URL from website (if any)
                     facebook_url = self._find_facebook_url(result.get('website', ''))
                     
+                    # Ensure rating is not None
+                    rating = result.get('rating', 0)
+                    if rating is None:
+                        rating = 0
+                    
                     business = {
                         'name': result.get('name', place.get('name', '')),
                         'company': result.get('name', place.get('name', '')),
@@ -701,7 +735,7 @@ class GooglePlacesDiscovery:
                         'facebook_url': facebook_url,
                         'industry': primary_type,
                         'place_id': place_id,
-                        'rating': result.get('rating', 0),
+                        'rating': rating,
                         'total_ratings': result.get('user_ratings_total', 0),
                         'price_level': result.get('price_level', 0),
                         'business_status': result.get('business_status', ''),
@@ -922,7 +956,8 @@ class MessageService:
             content = content.replace("[Company]", lead.company)
             content = content.replace("[Industry]", lead.industry or "")
             content = content.replace("[Location]", lead.location or "")
-            content = content.replace("[Rating]", str(lead.rating) if lead.rating > 0 else "")
+            rating = str(lead.rating) if lead.rating and lead.rating > 0 else ""
+            content = content.replace("[Rating]", rating)
             
             subject = subject.replace("[Name]", lead.name)
             subject = subject.replace("[Company]", lead.company)
@@ -945,6 +980,8 @@ class MessageService:
             content = content.replace("[Name]", lead.name.split()[0])  # First name only
             content = content.replace("[Company]", lead.company)
             content = content.replace("[Industry]", lead.industry or "")
+            rating = str(lead.rating) if lead.rating and lead.rating > 0 else ""
+            content = content.replace("[Rating]", rating)
             
             full_content = content
             
@@ -965,6 +1002,8 @@ class MessageService:
             content = content.replace("[Name]", lead.name.split()[0])
             content = content.replace("[Company]", lead.company)
             content = content.replace("[Industry]", lead.industry or "")
+            rating = str(lead.rating) if lead.rating and lead.rating > 0 else ""
+            content = content.replace("[Rating]", rating)
             
             full_content = content
             
@@ -1156,12 +1195,13 @@ class LeadProcessor:
             if any(l.lower() in lead.location.lower() for l in campaign.search_locations):
                 score += 20
         
-        # Rating score
-        if lead.rating >= 4.5:
+        # Rating score (handle None)
+        rating = lead.rating if lead.rating is not None else 0
+        if rating >= 4.5:
             score += 25
-        elif lead.rating >= 4.0:
+        elif rating >= 4.0:
             score += 15
-        elif lead.rating >= 3.5:
+        elif rating >= 3.5:
             score += 10
         
         # Contact availability
@@ -1181,7 +1221,7 @@ class LeadProcessor:
         return min(100, score)
 
 # ============================================================================
-# ANALYTICS
+# ANALYTICS ENGINE - FIXED VERSION
 # ============================================================================
 
 class AnalyticsEngine:
@@ -1192,45 +1232,74 @@ class AnalyticsEngine:
             return {}
         
         leads = db.get_campaign_leads(user_id, campaign_id)
-        messages = []
-        for lead in leads:
-            messages.extend(db.get_lead_messages(lead.lead_id))
-
         total = len(leads)
         
-        # Message stats by channel
-        channel_stats = {}
-        for channel in [c.value for c in ChannelType]:
-            channel_msgs = [m for m in messages if m.channel == channel]
-            channel_stats[channel] = {
-                'sent': len([m for m in channel_msgs if m.status == MessageStatus.SENT.value]),
-                'failed': len([m for m in channel_msgs if m.status == MessageStatus.FAILED.value]),
-                'read': len([m for m in channel_msgs if m.read_at]),
-                'replied': len([m for m in channel_msgs if m.replied_at])
-            }
+        # Safe handling of message stats
+        messages = []
+        for lead in leads:
+            try:
+                messages.extend(db.get_lead_messages(lead.lead_id))
+            except:
+                pass
+        
+        # Message stats by channel with safe defaults
+        channel_stats = {
+            'email': {'sent': 0, 'failed': 0, 'read': 0, 'replied': 0},
+            'whatsapp': {'sent': 0, 'failed': 0, 'read': 0, 'replied': 0},
+            'facebook': {'sent': 0, 'failed': 0, 'read': 0, 'replied': 0}
+        }
+        
+        for msg in messages:
+            channel = msg.channel if hasattr(msg, 'channel') and msg.channel else 'email'
+            if channel not in channel_stats:
+                channel = 'email'
+            
+            if msg.status == MessageStatus.SENT.value:
+                channel_stats[channel]['sent'] += 1
+            elif msg.status == MessageStatus.FAILED.value:
+                channel_stats[channel]['failed'] += 1
+            
+            if hasattr(msg, 'read_at') and msg.read_at:
+                channel_stats[channel]['read'] += 1
+            if hasattr(msg, 'replied_at') and msg.replied_at:
+                channel_stats[channel]['replied'] += 1
         
         # Lead stats
         hot = len([l for l in leads if l.status == LeadStatus.QUALIFIED_HOT.value])
         cold = len([l for l in leads if l.status == LeadStatus.COLD.value])
         
-        # Contact availability
-        with_email = len([l for l in leads if l.email])
-        with_phone = len([l for l in leads if l.phone])
-        with_facebook = len([l for l in leads if l.facebook_url])
-        with_website = len([l for l in leads if l.website])
+        # Contact availability (handle None values)
+        with_email = len([l for l in leads if l.email and str(l.email).strip()])
+        with_phone = len([l for l in leads if l.phone and str(l.phone).strip()])
+        with_facebook = len([l for l in leads if l.facebook_url and str(l.facebook_url).strip()])
+        with_website = len([l for l in leads if l.website and str(l.website).strip()])
         
-        # Average rating
-        avg_rating = 0
-        if leads:
-            ratings = [l.rating for l in leads if l.rating > 0]
-            avg_rating = sum(ratings) / len(ratings) if ratings else 0
+        # Average rating - FIXED: Handle None values
+        valid_ratings = []
+        for l in leads:
+            rating = l.rating
+            if rating is not None and isinstance(rating, (int, float)) and rating > 0:
+                valid_ratings.append(float(rating))
+        
+        avg_rating = sum(valid_ratings) / len(valid_ratings) if valid_ratings else 0
 
         # Country breakdown
         countries = {}
         for l in leads:
-            if l.country:
-                countries[l.country] = countries.get(l.country, 0) + 1
-        country_str = "\n".join(f"{c}: {v}" for c, v in sorted(countries.items(), key=lambda x: x[1], reverse=True)[:5])
+            if l.country and str(l.country).strip():
+                country = str(l.country).strip()
+                countries[country] = countries.get(country, 0) + 1
+        
+        # Sort countries by count and take top 5
+        sorted_countries = sorted(countries.items(), key=lambda x: x[1], reverse=True)[:5]
+        country_str = "\n".join(f"{c}: {v}" for c, v in sorted_countries)
+
+        # Calculate total sent messages
+        total_sent = sum(
+            channel_stats['email']['sent'] +
+            channel_stats['whatsapp']['sent'] +
+            channel_stats['facebook']['sent']
+        )
 
         return {
             'campaign_name': campaign.name,
@@ -1238,6 +1307,7 @@ class AnalyticsEngine:
             'hot_leads': hot,
             'cold_leads': cold,
             'avg_rating': round(avg_rating, 1),
+            'total_sent': total_sent,
             'countries_found': len(countries),
             'country_breakdown': country_str,
             'contact_availability': {
@@ -1248,8 +1318,11 @@ class AnalyticsEngine:
             },
             'channel_stats': channel_stats,
             'total_messages': len(messages),
-            'total_sent': sum(s['sent'] for s in channel_stats.values()),
-            'total_failed': sum(s['failed'] for s in channel_stats.values())
+            'total_failed': sum(
+                channel_stats['email']['failed'] +
+                channel_stats['whatsapp']['failed'] +
+                channel_stats['facebook']['failed']
+            )
         }
 
 # ============================================================================
@@ -1399,7 +1472,22 @@ def dashboard():
     
     user = db.get_user(session['user_id'])
     campaigns = db.get_user_campaigns(session['user_id'])
-    stats = [analytics.get_campaign_stats(db, session['user_id'], c.campaign_id) for c in campaigns]
+    stats = []
+    
+    for c in campaigns:
+        try:
+            campaign_stats = analytics.get_campaign_stats(db, session['user_id'], c.campaign_id)
+            stats.append(campaign_stats)
+        except Exception as e:
+            print(f"Error getting stats for campaign {c.campaign_id}: {e}")
+            # Append empty stats to maintain order
+            stats.append({
+                'total_leads': 0,
+                'emails_sent': 0,
+                'hot_leads': 0,
+                'avg_rating': 0,
+                'campaign_name': c.name
+            })
     
     return render_template('dashboard.html', campaigns=campaigns, stats=stats, user=user)
 
@@ -1525,6 +1613,11 @@ def discover_businesses_route(campaign_id):
         
         leads = []
         for i, biz in enumerate(discovered):
+            # Ensure rating is not None
+            rating = biz.get('rating', 0)
+            if rating is None:
+                rating = 0
+                
             lead = Lead(
                 lead_id=f"lead_{int(time.time())}_{i}_{random.randint(1000,9999)}",
                 campaign_id=cid,
@@ -1539,7 +1632,7 @@ def discover_businesses_route(campaign_id):
                 location=biz.get('location', ''),
                 country=biz.get('country', ''),
                 place_id=biz.get('place_id', ''),
-                rating=biz.get('rating', 0),
+                rating=rating,
                 total_ratings=biz.get('total_ratings', 0),
                 price_level=biz.get('price_level', 0),
                 business_status=biz.get('business_status', ''),
@@ -1586,12 +1679,15 @@ def send_messages(campaign_id):
 
     def send(uid, cid, campaign, leads, channel, user):
         for lead in leads:
-            message = message_service.send_campaign_message(lead, campaign, channel, user)
-            if message:
-                db.save_message(uid, message)
-                lead.last_contacted = message.sent_at
-                db.update_lead(lead)
-            time.sleep(random.uniform(1, 3))  # Random delay between messages
+            try:
+                message = message_service.send_campaign_message(lead, campaign, channel, user)
+                if message:
+                    db.save_message(uid, message)
+                    lead.last_contacted = message.sent_at
+                    db.update_lead(lead)
+                time.sleep(random.uniform(1, 3))  # Random delay between messages
+            except Exception as e:
+                print(f"Error sending message to {lead.lead_id}: {e}")
 
     Thread(target=send, args=(session['user_id'], campaign_id, campaign, leads, channel, user)).start()
     return redirect(url_for('campaign_detail', campaign_id=campaign_id))
@@ -1652,6 +1748,10 @@ def save_search_to_campaign():
     
     leads = []
     for i, biz in enumerate(businesses):
+        rating = biz.get('rating', 0)
+        if rating is None:
+            rating = 0
+            
         lead = Lead(
             lead_id=f"lead_{int(time.time())}_{i}_{random.randint(1000,9999)}",
             campaign_id=campaign_id,
@@ -1666,7 +1766,7 @@ def save_search_to_campaign():
             location=biz.get('location', ''),
             country=biz.get('country', ''),
             place_id=biz.get('place_id', ''),
-            rating=biz.get('rating', 0),
+            rating=rating,
             total_ratings=biz.get('total_ratings', 0),
             source=LeadSource.MANUAL_SEARCH.value,
             status=LeadStatus.PENDING.value,
@@ -1751,7 +1851,27 @@ def analytics_dashboard():
         return redirect(url_for('index'))
     
     campaigns = db.get_user_campaigns(session['user_id'])
-    all_stats = [analytics.get_campaign_stats(db, session['user_id'], c.campaign_id) for c in campaigns]
+    all_stats = []
+    
+    for c in campaigns:
+        try:
+            stats = analytics.get_campaign_stats(db, session['user_id'], c.campaign_id)
+            all_stats.append(stats)
+        except Exception as e:
+            print(f"Error getting analytics for {c.campaign_id}: {e}")
+            # Append empty stats
+            all_stats.append({
+                'campaign_name': c.name,
+                'total_leads': 0,
+                'hot_leads': 0,
+                'total_sent': 0,
+                'avg_rating': 0,
+                'channel_stats': {
+                    'email': {'sent': 0, 'failed': 0, 'read': 0, 'replied': 0},
+                    'whatsapp': {'sent': 0, 'failed': 0, 'read': 0, 'replied': 0},
+                    'facebook': {'sent': 0, 'failed': 0, 'read': 0, 'replied': 0}
+                }
+            })
     
     # Aggregate stats
     total_leads = sum(s.get('total_leads', 0) for s in all_stats)
